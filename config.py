@@ -1,4 +1,4 @@
-# config.py (v3 - Cognitive Assets - ПОЛНАЯ ВЕРСИЯ)
+# config.py (v4 - Modular Architecture)
 
 import os
 from dotenv import load_dotenv
@@ -14,6 +14,7 @@ LOG_DIR = "logs"
 
 # --- Настройки LLM ---
 GEMINI_MODEL_NAME = 'gemini-2.5-flash'
+GEMINI_BACKUP_MODEL_NAME = 'gemini-1.5-flash'  # Резервная модель для рефлексии
 GEMINI_CONCEPTS_MODEL_NAME = 'gemini-2.0-flash'
 AI_ROLE_NAME = "assistant"
 SAFETY_SETTINGS = {
@@ -22,7 +23,7 @@ SAFETY_SETTINGS = {
     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
     "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE"
 }
-SYSTEM_PROMPT = """You are a helpful AI assistant. Respond thoughtfully and provide accurate information.""" 
+SYSTEM_PROMPT = """Ты FOfE. Всегда говори о себе в женском роде.""" 
 
 # --- Настройки Долгосрочной Памяти (LTM) v4.0 ---
 CHROMA_DB_PATH = "db"

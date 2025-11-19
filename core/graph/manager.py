@@ -1,6 +1,8 @@
-# graph_manager.py
-# Версия для архитектуры v3.0 "Когнитивные Активы"
-# Улучшено: добавлена асинхронность и потокобезопасность для работы в asyncio-среде.
+# core/graph/manager.py
+"""
+Менеджер графа мыслей
+Версия для архитектуры v3.0 "Когнитивные Активы"
+"""
 
 import networkx as nx
 import os
@@ -9,35 +11,53 @@ import logging
 import asyncio
 from config import GRAPH_STRUCTURAL_THRESHOLD
 
+
 class GraphManager:
     """
     Класс для управления графом мыслей.
     Отвечает за загрузку, сохранение и модификацию графа.
     Эта версия потокобезопасна для использования в асинхронной среде.
     """
+    
     def __init__(self, graph_path: str):
         """
         Инициализирует менеджер графа, загружает граф и создает блокировку
         для безопасного асинхронного доступа.
+        
+        Args:
+            graph_path: Путь к файлу графа
         """
         self.graph_path = graph_path
         self.graph = self._load_graph()
         self.lock = asyncio.Lock()  # Блокировка для обеспечения потокобезопасности
-        logging.info(f"Graph Manager: Граф загружен из '{self.graph_path}'. "
-                     f"Узлов: {self.graph.number_of_nodes()}, "
-                     f"Рёбер: {self.graph.number_of_edges()}")
+        logging.info(
+            f"Graph Manager: Граф загружен из '{self.graph_path}'. "
+            f"Узлов: {self.graph.number_of_nodes()}, "
+            f"Рёбер: {self.graph.number_of_edges()}"
+        )
 
     def _load_graph(self) -> nx.Graph:
-        """Загружает граф с диска или создает новый, если файл не найден."""
+        """
+        Загружает граф с диска или создает новый, если файл не найден.
+        
+        Returns:
+            Объект графа NetworkX
+        """
         if os.path.exists(self.graph_path):
             try:
                 with open(self.graph_path, 'rb') as f:
                     return pickle.load(f)
             except Exception as e:
-                logging.error(f"Graph Manager: Ошибка загрузки графа из {self.graph_path}: {e}. Создается новый граф.")
+                logging.error(
+                    f"Graph Manager: Ошибка загрузки графа из {self.graph_path}: {e}. "
+                    "Создается новый граф."
+                )
                 return nx.Graph()
         else:
-            logging.info(f"Graph Manager: Файл графа не найден по пути {self.graph_path}. Создается новый граф.")
+            logging.info(
+                f"Graph Manager: Файл графа не найден по пути {self.graph_path}. "
+                "Создается новый граф."
+            )
             return nx.Graph()
 
     def save_graph(self):
@@ -50,18 +70,24 @@ class GraphManager:
             os.makedirs(os.path.dirname(self.graph_path), exist_ok=True)
             # При сохранении мы не используем lock, так как предполагается,
             # что эта операция будет вызываться редко (например, по таймеру),
-            # а не одновременно с модификациями. Если нужна 100% гарантия,
-            # можно сделать и этот метод асинхронным с lock.
+            # а не одновременно с модификациями
             with open(self.graph_path, 'wb') as f:
                 pickle.dump(self.graph, f, pickle.HIGHEST_PROTOCOL)
-            logging.info(f"Graph Manager: Граф успешно сохранен в '{self.graph_path}'. "
-                         f"Узлов: {self.graph.number_of_nodes()}, Рёбер: {self.graph.number_of_edges()}")
+            logging.info(
+                f"Graph Manager: Граф успешно сохранен в '{self.graph_path}'. "
+                f"Узлов: {self.graph.number_of_nodes()}, "
+                f"Рёбер: {self.graph.number_of_edges()}"
+            )
         except Exception as e:
             logging.error(f"Graph Manager: Не удалось сохранить граф: {e}")
 
     async def add_node_if_not_exists(self, node_id: str, **attrs):
         """
         (Асинхронно) Добавляет узел, если он еще не существует, и обновляет его атрибуты.
+        
+        Args:
+            node_id: ID узла
+            **attrs: Атрибуты узла
         """
         async with self.lock:
             if not self.graph.has_node(node_id):
@@ -70,16 +96,30 @@ class GraphManager:
                 # Обновляем атрибуты, если узел уже существует
                 nx.set_node_attributes(self.graph, {node_id: attrs})
 
-    async def add_or_update_edge(self, node1_id: str, node2_id: str, similarity_score: float, asset1_meta: dict, asset2_meta: dict):
+    async def add_or_update_edge(
+        self,
+        node1_id: str,
+        node2_id: str,
+        similarity_score: float,
+        asset1_meta: dict,
+        asset2_meta: dict
+    ):
         """
         (Асинхронно и потокобезопасно) Добавляет или обновляет ребро,
         взвешивая его на основе семантической близости, важности (importance)
         и уверенности (confidence) породивших его Когнитивных Активов.
+        
+        Args:
+            node1_id: ID первого узла
+            node2_id: ID второго узла
+            similarity_score: Оценка семантической близости
+            asset1_meta: Метаданные первого актива
+            asset2_meta: Метаданные второго актива
         """
         if node1_id == node2_id:
             return
 
-        # Захватываем блокировку, чтобы безопасно изменять граф из разных корутин
+        # Захватываем блокировку для безопасной модификации графа
         async with self.lock:
             # Извлекаем оценки из метаданных
             imp1 = asset1_meta.get('importance', 5)
@@ -87,9 +127,9 @@ class GraphManager:
             imp2 = asset2_meta.get('importance', 5)
             conf2 = asset2_meta.get('confidence', 5)
 
-            # Рассчитываем итоговый вес, где максимальное значение = similarity_score
+            # Рассчитываем итоговый вес
             # Формула: близость * среднее_арифметическое(важность*уверенность / 100)
-            # Делим на 100, т.к. imp и conf от 1 до 10, их произведение до 100.
+            # Делим на 100, т.к. imp и conf от 1 до 10, их произведение до 100
             weight_modifier = ((imp1 * conf1) + (imp2 * conf2)) / 200.0
             final_weight = similarity_score * weight_modifier
 
@@ -113,10 +153,3 @@ class GraphManager:
                     shared_concepts_count=1,
                     cumulative_weight=final_weight  # Начальный вес
                 )
-
-
-# --- Инициализация синглтона ---
-from config import GRAPH_FILE_PATH
-
-# Создаем единственный экземпляр менеджера, который будет использоваться во всем приложении
-graph_manager = GraphManager(graph_path=GRAPH_FILE_PATH)
