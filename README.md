@@ -129,6 +129,10 @@ python -m scripts.force_reflection
 
 ## Visualizations
 
+### 🌐 Live Demo
+Explore the **[Interactive RAG Pipeline Visualization](https://endearing-belekoy-40e114.netlify.app/)** to see how the bot processes information.
+
+### 📂 Local Artifacts
 The project generates interactive HTML files to visualize the bot's internal state:
 -   `interactive_graph_visualization.html`: Full interactive graph (PyVis).
 -   `graph_banner_visualization.html`: A simplified, banner-like view.
