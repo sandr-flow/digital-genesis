@@ -58,21 +58,21 @@ class SearchManager:
                 ac = meta.get('access_count', 0)
 
                 counts.append(ac)
-                # Форматируем строку для подачи в промпт
-                memories.append(f"[{meta.get('role', 'unknown').capitalize()} в прошлом (ac={ac})]: {docs[i]}")
+                # Format string for prompt
+                memories.append(f"[{meta.get('role', 'unknown').capitalize()} in past (ac={ac})]: {docs[i]}")
 
-                # Готовим данные для обновления
+                # Prepare data for update
                 meta['access_count'] = ac + 1
                 ids_to_update.append(retrieved_ids[i])
                 metas_to_update.append(meta)
 
-            # Выполняем пакетное обновление метаданных
+            # Perform batch metadata update
             if ids_to_update:
                 self.stream_collection.update(ids=ids_to_update, metadatas=metas_to_update)
 
             return memories, counts
         except Exception as e:
-            logging.error(f"LTM Search: Ошибка во время поиска: {e}", exc_info=True)
+            logging.error(f"LTM Search: Error during search: {e}", exc_info=True)
             return [], []
     
     def get_random_hot_record_as_seed(self, min_access_count: int) -> dict | None:
@@ -111,7 +111,7 @@ class SearchManager:
 
             return random.choices(population=population, weights=weights, k=1)[0]
         except Exception as e:
-            logging.error(f"LTM Seed: Ошибка при поиске 'зерна': {e}")
+            logging.error(f"LTM Seed: Error finding seed: {e}")
             return None
 
     def get_semantic_cluster(self, seed_doc: str, cluster_size: int) -> list[dict]:
@@ -143,7 +143,7 @@ class SearchManager:
                 for i in range(len(results['ids'][0]))
             ]
         except Exception as e:
-            logging.error(f"LTM Cluster: Ошибка при поиске кластера: {e}")
+            logging.error(f"LTM Cluster: Error finding cluster: {e}")
             return []
 
     def cooldown_records_by_ids(self, ids: list[str]):
@@ -174,7 +174,7 @@ class SearchManager:
             if ids_to_update:
                 self.stream_collection.update(ids=ids_to_update, metadatas=metas_to_update)
         except Exception as e:
-            logging.error(f"LTM Cooldown: Ошибка при 'охлаждении': {e}")
+            logging.error(f"LTM Cooldown: Error during cooldown: {e}")
 
     def get_records_by_ids(self, ids: list[str]) -> list[dict] | None:
         """Retrieve records by their IDs.
@@ -204,5 +204,5 @@ class SearchManager:
                 })
             return result_list
         except Exception as e:
-            logging.error(f"LTM: Ошибка при получении записей по ID: {e}")
+            logging.error(f"LTM: Error retrieving records by ID: {e}")
             return None

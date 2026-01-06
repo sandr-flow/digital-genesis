@@ -47,7 +47,7 @@ class FactManager:
         
         if not self.facts_collection.get(ids=[fact_id])['ids']:
             self.facts_collection.add(documents=[fact_text], ids=[fact_id])
-            logging.info(f"LTM: Создан новый Факт '{fact_text[:50]}...' (ID: {fact_id[:16]})")
+            logging.info(f"LTM: Created new Fact '{fact_text[:50]}...' (ID: {fact_id[:16]})")
             
         return fact_id
 
@@ -65,13 +65,13 @@ class FactManager:
         modality_id = self._get_hash(modality_text)
         
         if not self.modalities_collection.get(ids=[modality_id])['ids']:
-            # Добавляем префикс для лучшей векторизации
-            hydrated_text = f"ментальное действие: {modality_text}"
+            # Add prefix for better vectorization
+            hydrated_text = f"mental action: {modality_text}"
             self.modalities_collection.add(
                 documents=[hydrated_text],
                 metadatas=[{"original_text": modality_text}],
                 ids=[modality_id]
             )
-            logging.info(f"LTM: Создана новая Модальность '{modality_text}' (ID: {modality_id[:16]})")
+            logging.info(f"LTM: Created new Modality '{modality_text}' (ID: {modality_id[:16]})")
             
         return modality_id

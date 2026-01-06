@@ -33,10 +33,10 @@ class LTM_Manager:
     def __init__(self):
         """Initialize the LTM manager and all submodules."""
         try:
-            # Инициализация ChromaDB клиента
+            # Initialize ChromaDB client
             self.client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
             
-            # Создаём или получаем коллекции
+            # Get or create collections
             self.stream_collection = self.client.get_or_create_collection(
                 name=CHROMA_STREAM_COLLECTION_NAME
             )
@@ -51,14 +51,14 @@ class LTM_Manager:
             )
 
             logging.info(
-                f"LTM Manager: Инициализировано 4 коллекции: "
+                f"LTM Manager: Initialized 4 collections: "
                 f"Stream: {self.stream_collection.count()}, "
                 f"Assets: {self.assets_collection.count()}, "
                 f"Facts: {self.facts_collection.count()}, "
                 f"Modalities: {self.modalities_collection.count()}."
             )
 
-            # Инициализация подмодулей
+            # Initialize submodules
             self.search_manager = SearchManager(self.stream_collection)
             self.fact_manager = FactManager(self.facts_collection, self.modalities_collection)
             self.asset_extractor = AssetExtractor(
@@ -70,7 +70,7 @@ class LTM_Manager:
             
         except Exception as e:
             logging.critical(
-                f"LTM Manager: Не удалось инициализировать ChromaDB! Ошибка: {e}",
+                f"LTM Manager: Failed to initialize ChromaDB! Error: {e}",
                 exc_info=True
             )
             raise
@@ -93,14 +93,14 @@ class LTM_Manager:
         """
         text_hash = self._get_hash(text)
         
-        # Обернем I/O в to_thread для полной асинхронности
+        # Wrap I/O in to_thread for full async
         existing = await asyncio.to_thread(
             self.stream_collection.get,
             where={"hash": {"$eq": text_hash}},
             limit=1
         )
         if existing and existing['ids']:
-            logging.debug(f"LTM Stream: Найдена существующая запись с хешем {text_hash[:16]}...")
+            logging.debug(f"LTM Stream: Found existing record with hash {text_hash[:16]}...")
             return existing['ids'][0]
 
         new_id = f"{role}_{str(uuid.uuid4())}"
@@ -111,7 +111,7 @@ class LTM_Manager:
             "hash": text_hash
         }
         
-        # Обернем I/O в to_thread
+        # Wrap I/O in to_thread
         await asyncio.to_thread(
             self.stream_collection.add,
             documents=[text],
@@ -126,7 +126,7 @@ class LTM_Manager:
             timestamp=metadata["timestamp"]
         )
 
-        logging.info(f"LTM Stream: Создана новая запись ID {new_id} для роли '{role}'.")
+        logging.info(f"LTM Stream: Created new record ID {new_id} for role '{role}'.")
         return new_id
 
     async def save_dialogue_pair(self, user_text: str, bot_text: str, bot_response_access_count: int = 0) -> tuple[str, str]:
@@ -140,7 +140,7 @@ class LTM_Manager:
         Returns:
             Tuple of (user record ID, bot record ID).
         """
-        # Запускаем создание обеих записей параллельно
+        # Create both records in parallel
         user_task = asyncio.create_task(
             self._add_to_stream(text=user_text, role="user", initial_ac=0)
         )

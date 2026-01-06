@@ -45,24 +45,24 @@ async def run_concepts_extraction_with_wait(user_record_id: str, bot_record_id: 
         user_record_id: User message record ID.
         bot_record_id: Bot response record ID.
     """
-    concepts_logger.info("Запуск параллельного извлечения активов для диалоговой пары...")
+    concepts_logger.info("Starting parallel asset extraction for dialogue pair...")
 
     async def safe_extract_assets(parent_id: str, description: str):
         """Safely extract assets with full error logging."""
-        concepts_logger.info(f"=== НАЧАЛО ИЗВЛЕЧЕНИЯ АКТИВОВ ===")
+        concepts_logger.info(f"=== START ASSET EXTRACTION ===")
         concepts_logger.info(f"Parent ID: {parent_id}")
         concepts_logger.info(f"Description: {description}")
 
         try:
             await ltm.extract_and_process_assets(parent_id=parent_id)
-            concepts_logger.info(f"✓ Успешно завершено извлечение активов для {parent_id} ({description})")
+            concepts_logger.info(f"Asset extraction completed for {parent_id} ({description})")
         except Exception as e:
-            concepts_logger.error(f"✗ ОШИБКА при извлечении активов для {parent_id} ({description}): {e}", exc_info=True)
-            logging.error(f"КРИТИЧЕСКАЯ ОШИБКА АКТИВОВ [{parent_id}]: {e}", exc_info=True)
+            concepts_logger.error(f"ERROR extracting assets for {parent_id} ({description}): {e}", exc_info=True)
+            logging.error(f"CRITICAL ASSET ERROR [{parent_id}]: {e}", exc_info=True)
 
-        concepts_logger.info(f"=== КОНЕЦ ИЗВЛЕЧЕНИЯ АКТИВОВ ===")
+        concepts_logger.info(f"=== END ASSET EXTRACTION ===")
 
-    # Создаем задачи
+    # Create tasks
     user_task = asyncio.create_task(
         safe_extract_assets(user_record_id, "USER_MESSAGE"),
         name=f"extract_user_{user_record_id}"
@@ -72,12 +72,12 @@ async def run_concepts_extraction_with_wait(user_record_id: str, bot_record_id: 
         name=f"extract_bot_{bot_record_id}"
     )
 
-    # Ждем завершения обеих задач
+    # Wait for both tasks
     try:
         await asyncio.gather(user_task, bot_task, return_exceptions=True)
-        concepts_logger.info("Извлечение активов для диалоговой пары завершено")
+        concepts_logger.info("Asset extraction for dialogue pair completed")
     except Exception as e:
-        concepts_logger.error(f"Ошибка при групповом извлечении активов: {e}", exc_info=True)
+        concepts_logger.error(f"Error in group asset extraction: {e}", exc_info=True)
 
 
 @router.message(F.text & (F.text != "🔄 Сброс контекста"))
@@ -91,10 +91,10 @@ async def handle_text_message(message: Message, bot: Bot):
     user_id = message.from_user.id
     user_text = message.text
 
-    # Получаем или создаём сессию чата
+    # Get or create chat session
     chat_session = user_chats.get(user_id)
     if not chat_session:
-        logging.info(f"Для пользователя {user_id} не найдена активная сессия STM. Создаю новую.")
+        logging.info(f"No active STM session for user {user_id}. Creating new one.")
         model = gemini_client.create_chat_model()
         chat_session = model.start_chat(history=[])
         user_chats[user_id] = chat_session
@@ -102,7 +102,7 @@ async def handle_text_message(message: Message, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
 
-        # Поиск в долгосрочной памяти
+        # Search long-term memory
         thought_memories, _ = ltm.search_and_update(
             query_text=user_text,
             n_results=config.THOUGHT_SEARCH_RESULT_COUNT,
@@ -114,7 +114,7 @@ async def handle_text_message(message: Message, bot: Bot):
             where_filter={"role": {"$in": ["user", config.AI_ROLE_NAME]}}
         )
 
-        # Формирование контекста
+        # Form context
         all_relevant_memories = list(dict.fromkeys(thought_memories + dialogue_memories))
         final_prompt = user_text
         if all_relevant_memories:
@@ -128,11 +128,11 @@ async def handle_text_message(message: Message, bot: Bot):
         thought_process_logger.info(f"User query: '{user_text}'")
         thought_process_logger.info(f"Final prompt sent to LLM:\n---\n{final_prompt}\n---")
 
-        # Получение ответа от LLM
+        # Get LLM response
         response = await chat_session.send_message_async(final_prompt)
         bot_response_original = response.text
 
-        # Отправка ответа с поддержкой Markdown
+        # Send response with Markdown support
         bot_response_formatted = convert_to_telegram_markdown(bot_response_original)
         try:
             await message.answer(
@@ -141,13 +141,13 @@ async def handle_text_message(message: Message, bot: Bot):
                 reply_markup=get_persistent_keyboard()
             )
         except TelegramBadRequest as e:
-            logging.warning(f"Ошибка парсинга Markdown: {e}. Отправка как простой текст.")
+            logging.warning(f"Markdown parsing error: {e}. Sending as plain text.")
             await message.answer(
                 bot_response_original,
                 reply_markup=get_persistent_keyboard()
             )
 
-        # Сохранение в долгосрочную память
+        # Save to long-term memory
         bot_response_ac = round(statistics.median(dialogue_access_counts)) if dialogue_access_counts else 0
         user_record_id, bot_record_id = await ltm.save_dialogue_pair(
             user_text=user_text,
@@ -156,18 +156,18 @@ async def handle_text_message(message: Message, bot: Bot):
         )
 
         thought_process_logger.info(f"Bot response: '{bot_response_original}'")
-        thought_process_logger.info(f"Записи сохранены: User ID={user_record_id}, Bot ID={bot_record_id}")
+        thought_process_logger.info(f"Records saved: User ID={user_record_id}, Bot ID={bot_record_id}")
 
-        # Извлечение концептов
-        concepts_logger.info("Инициируется извлечение концептов для диалоговой пары...")
+        # Extract concepts
+        concepts_logger.info("Starting concept extraction for dialogue pair...")
         await run_concepts_extraction_with_wait(user_record_id, bot_record_id)
 
         thought_process_logger.info(f"--- END DIALOGUE TURN ---")
 
     except Exception as e:
-        logging.error(f"Критическая ошибка при обработке сообщения от {user_id}: {e}", exc_info=True)
+        logging.error(f"Critical error processing message from {user_id}: {e}", exc_info=True)
         await message.answer(
-            "Произошла ошибка во время обработки вашего запроса. Попробуйте начать заново с команды /start."
+            "An error occurred while processing your request. Try starting over with /start."
         )
         if user_id in user_chats:
             del user_chats[user_id]

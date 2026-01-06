@@ -28,11 +28,11 @@ class GraphManager:
         """
         self.graph_path = graph_path
         self.graph = self._load_graph()
-        self.lock = asyncio.Lock()  # Блокировка для обеспечения потокобезопасности
+        self.lock = asyncio.Lock()  # Lock for thread-safety
         logging.info(
-            f"Graph Manager: Граф загружен из '{self.graph_path}'. "
-            f"Узлов: {self.graph.number_of_nodes()}, "
-            f"Рёбер: {self.graph.number_of_edges()}"
+            f"Graph Manager: Graph loaded from '{self.graph_path}'. "
+            f"Nodes: {self.graph.number_of_nodes()}, "
+            f"Edges: {self.graph.number_of_edges()}"
         )
 
     def _load_graph(self) -> nx.Graph:
@@ -47,14 +47,14 @@ class GraphManager:
                     return pickle.load(f)
             except Exception as e:
                 logging.error(
-                    f"Graph Manager: Ошибка загрузки графа из {self.graph_path}: {e}. "
-                    "Создается новый граф."
+                    f"Graph Manager: Error loading graph from {self.graph_path}: {e}. "
+                    "Creating new graph."
                 )
                 return nx.Graph()
         else:
             logging.info(
-                f"Graph Manager: Файл графа не найден по пути {self.graph_path}. "
-                "Создается новый граф."
+                f"Graph Manager: Graph file not found at {self.graph_path}. "
+                "Creating new graph."
             )
             return nx.Graph()
 
@@ -66,18 +66,17 @@ class GraphManager:
         """
         try:
             os.makedirs(os.path.dirname(self.graph_path), exist_ok=True)
-            # При сохранении мы не используем lock, так как предполагается,
-            # что эта операция будет вызываться редко (например, по таймеру),
-            # а не одновременно с модификациями
+            # No lock during save - assuming this is called infrequently (e.g., on timer)
+            # and not concurrently with modifications
             with open(self.graph_path, 'wb') as f:
                 pickle.dump(self.graph, f, pickle.HIGHEST_PROTOCOL)
             logging.info(
-                f"Graph Manager: Граф успешно сохранен в '{self.graph_path}'. "
-                f"Узлов: {self.graph.number_of_nodes()}, "
-                f"Рёбер: {self.graph.number_of_edges()}"
+                f"Graph Manager: Graph saved to '{self.graph_path}'. "
+                f"Nodes: {self.graph.number_of_nodes()}, "
+                f"Edges: {self.graph.number_of_edges()}"
             )
         except Exception as e:
-            logging.error(f"Graph Manager: Не удалось сохранить граф: {e}")
+            logging.error(f"Graph Manager: Failed to save graph: {e}")
 
     async def add_node_if_not_exists(self, node_id: str, **attrs):
         """Add a node if it doesn't exist and update its attributes.
@@ -90,7 +89,7 @@ class GraphManager:
             if not self.graph.has_node(node_id):
                 self.graph.add_node(node_id, **attrs)
             else:
-                # Обновляем атрибуты, если узел уже существует
+                # Update attributes if node already exists
                 nx.set_node_attributes(self.graph, {node_id: attrs})
 
     async def add_or_update_edge(
@@ -116,17 +115,17 @@ class GraphManager:
         if node1_id == node2_id:
             return
 
-        # Захватываем блокировку для безопасной модификации графа
+        # Acquire lock for safe graph modification
         async with self.lock:
-            # Извлекаем оценки из метаданных
+            # Extract scores from metadata
             imp1 = asset1_meta.get('importance', 5)
             conf1 = asset1_meta.get('confidence', 5)
             imp2 = asset2_meta.get('importance', 5)
             conf2 = asset2_meta.get('confidence', 5)
 
-            # Рассчитываем итоговый вес
-            # Формула: близость * среднее_арифметическое(важность*уверенность / 100)
-            # Делим на 100, т.к. imp и conf от 1 до 10, их произведение до 100
+            # Calculate final weight
+            # Formula: similarity * avg(importance*confidence / 100)
+            # Divide by 100 since imp and conf are 1-10, product up to 100
             weight_modifier = ((imp1 * conf1) + (imp2 * conf2)) / 200.0
             final_weight = similarity_score * weight_modifier
 
@@ -134,11 +133,11 @@ class GraphManager:
 
             if self.graph.has_edge(node1_id, node2_id):
                 edge = self.graph[node1_id][node2_id]
-                # Добавляем новый, взвешенный вес к кумулятивному
+                # Add new weighted weight to cumulative
                 edge['cumulative_weight'] = edge.get('cumulative_weight', 0) + final_weight
                 edge['shared_concepts_count'] = edge.get('shared_concepts_count', 0) + 1
                 edge['max_similarity'] = max(edge.get('max_similarity', 0), similarity_score)
-                # Если связь стала структурной, повышаем ее статус
+                # If link became structural, upgrade its status
                 if link_type == 'structural' and edge.get('type') == 'associative':
                     edge['type'] = 'structural'
             else:
@@ -148,5 +147,5 @@ class GraphManager:
                     type=link_type,
                     max_similarity=similarity_score,
                     shared_concepts_count=1,
-                    cumulative_weight=final_weight  # Начальный вес
+                    cumulative_weight=final_weight  # Initial weight
                 )

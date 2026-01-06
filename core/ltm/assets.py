@@ -63,7 +63,7 @@ class AssetExtractor:
         if self._concepts_model_instance is None:
             self._concepts_model_instance = self.gemini_client.create_concepts_model()
             if self._concepts_model_instance:
-                logging.info("LTM: Независимая модель для активов успешно создана.")
+                logging.info("LTM: Independent model for assets created successfully.")
         return self._concepts_model_instance
     
     async def extract_and_process_assets(self, parent_id: str):
@@ -74,16 +74,16 @@ class AssetExtractor:
         Args:
             parent_id: Parent record ID in stream.
         """
-        logging.info(f"LTM: Начинаю извлечение Когнитивных Активов для родителя {parent_id}")
+        logging.info(f"LTM: Starting Cognitive Asset extraction for parent {parent_id}")
         
         concepts_model = self._get_concepts_model()
         if not concepts_model:
-            logging.warning(f"Извлечение активов для {parent_id} пропущено: модель не инициализирована.")
+            logging.warning(f"Asset extraction for {parent_id} skipped: model not initialized.")
             return
 
         parent_record = self.stream_collection.get(ids=[parent_id], include=["documents", "metadatas"])
         if not parent_record['ids']:
-            logging.error(f"Не удалось найти родительскую запись {parent_id} для извлечения активов.")
+            logging.error(f"Could not find parent record {parent_id} for asset extraction.")
             return
 
         raw_text = parent_record['documents'][0]
@@ -92,7 +92,7 @@ class AssetExtractor:
         try:
             context_phrase = self._get_context_phrase_for_llm(role)
             
-            # Формируем упрощенный промпт для Structured Output
+            # Form simplified prompt for Structured Output
             prompt = f"""{context_phrase}
 
 Деконструируй текст на атомарные "Когнитивные Активы" - структурированные единицы знания.
@@ -109,7 +109,7 @@ class AssetExtractor:
 {raw_text}
 """
             
-            # Используем Structured Output с JSON schema
+            # Use Structured Output with JSON schema
             response = await concepts_model.generate_content_async(
                 prompt,
                 generation_config={
@@ -152,42 +152,42 @@ class AssetExtractor:
                 }
             )
             
-            # С Structured Output JSON парсится автоматически
+            # With Structured Output, JSON parses automatically
             assets_data = json.loads(response.text)
             
             if not isinstance(assets_data, list):
-                logging.warning(f"LTM: Ответ модели не является JSON-массивом для {parent_id}.")
+                logging.warning(f"LTM: Model response is not a JSON array for {parent_id}.")
                 return
 
-            logging.info(f"LTM: Извлечено {len(assets_data)} Когнитивных Активов для {parent_id}.")
+            logging.info(f"LTM: Extracted {len(assets_data)} Cognitive Assets for {parent_id}.")
 
-            # Обрабатываем каждый актив
+            # Process each asset
             for asset_data in assets_data:
-                # С Structured Output все ключи гарантированно присутствуют
+                # With Structured Output all keys are guaranteed present
                 fact_text = asset_data.get("суть")
                 modality_text = asset_data.get("что_делает")
                 
                 if not fact_text or not modality_text:
-                    logging.warning(f"LTM: Пропущен Актив с пустой 'сутью' или 'что_делает': {asset_data}")
+                    logging.warning(f"LTM: Skipped Asset with empty 'essence' or 'action': {asset_data}")
                     continue
 
-                # Создаём или получаем факт и модальность
+                # Create or get fact and modality
                 fact_id = self.fact_manager.get_or_create_fact(fact_text)
                 modality_id = self.fact_manager.get_or_create_modality(modality_text)
                 
-                # Сохраняем актив
+                # Save asset
                 asset_id = self._add_or_update_cognitive_asset(asset_data, parent_id, fact_id, modality_id)
-                logging.info(f"LTM: Актив сохранен/обновлен с ID: {asset_id}")
+                logging.info(f"LTM: Asset saved/updated with ID: {asset_id}")
 
-                # Обновляем граф
+                # Update graph
                 await self._rebuild_graph_for_asset(asset_id)
 
         except json.JSONDecodeError as e:
-            logging.error(f"LTM: Не удалось распарсить JSON из ответа модели: {e}", exc_info=True)
+            logging.error(f"LTM: Failed to parse JSON from model response: {e}", exc_info=True)
         except Exception as e:
-            logging.error(f"Ошибка при извлечении/обработке активов для {parent_id}: {e}", exc_info=True)
+            logging.error(f"Error extracting/processing assets for {parent_id}: {e}", exc_info=True)
             self._concepts_model_instance = None
-            logging.warning("LTM: Экземпляр модели активов сброшен из-за ошибки.")
+            logging.warning("LTM: Assets model instance reset due to error."))
 
     def _add_or_update_cognitive_asset(self, asset_data: dict, parent_id: str, fact_id: str, modality_id: str) -> str:
         """Add or update a cognitive asset.
@@ -219,7 +219,7 @@ class AssetExtractor:
                 "confidence": asset_data['confidence'],
             }
             
-            # Формируем текст актива для векторизации
+            # Form asset text for vectorization
             asset_text = f"[{asset_data['кто']}] -> [{asset_data['что_делает']}] -> ([{asset_data['суть']}])"
             
             self.assets_collection.add(
@@ -227,7 +227,7 @@ class AssetExtractor:
                 metadatas=[metadata],
                 ids=[new_asset_id]
             )
-            logging.info(f"LTM: Создан новый Когнитивный Актив {new_asset_id}")
+            logging.info(f"LTM: Created new Cognitive Asset {new_asset_id}")
             return new_asset_id
 
     async def _rebuild_graph_for_asset(self, asset_id: str):
@@ -242,37 +242,37 @@ class AssetExtractor:
         Args:
             asset_id: Cognitive asset ID.
         """
-        logging.debug(f"LTM: Начинаю обновление графа для Когнитивного Актива {asset_id}")
+        logging.debug(f"LTM: Starting graph update for Cognitive Asset {asset_id}")
 
-        # --- Шаг 1: Загрузка исходных данных об активе и его факте ---
+        # --- Step 1: Load initial asset and fact data ---
         try:
             asset_record = await asyncio.to_thread(
                 self.assets_collection.get, ids=[asset_id], include=["metadatas"]
             )
             if not asset_record.get('ids'):
-                logging.warning(f"Не удалось найти актив {asset_id} для обновления графа.")
+                logging.warning(f"Could not find asset {asset_id} for graph update.")
                 return
 
             current_asset_metadata = asset_record['metadatas'][0]
             fact_id = current_asset_metadata.get('fact_id')
             parent_id = current_asset_metadata.get('parent_id')
             if not fact_id or not parent_id:
-                logging.warning(f"Актив {asset_id} не имеет fact_id или parent_id. Пропуск.")
+                logging.warning(f"Asset {asset_id} has no fact_id or parent_id. Skipping.")
                 return
 
             fact_record = await asyncio.to_thread(
                 self.fact_manager.facts_collection.get, ids=[fact_id], include=["documents"]
             )
             if not fact_record.get('ids'):
-                logging.error(f"LTM: Не удалось найти текст для факта {fact_id[:16]}. Обновление графа невозможно.")
+                logging.error(f"LTM: Could not find text for fact {fact_id[:16]}. Graph update impossible.")
                 return
             fact_text = fact_record['documents'][0]
         except Exception as e:
-            logging.error(f"LTM: Ошибка на этапе загрузки исходных данных для актива {asset_id}: {e}")
+            logging.error(f"LTM: Error loading initial data for asset {asset_id}: {e}")
             return
 
-        # --- Шаг 2: Поиск семантически близких фактов-соседей ---
-        logging.debug(f"LTM: Ищем семантических соседей для факта '{fact_text[:50]}...'")
+        # --- Step 2: Search for semantically similar neighbor facts ---
+        logging.debug(f"LTM: Searching for semantic neighbors for fact '{fact_text[:50]}...'")
         neighbors = await asyncio.to_thread(
             self.fact_manager.facts_collection.query,
             query_texts=[fact_text],
@@ -280,10 +280,10 @@ class AssetExtractor:
             include=["distances"]
         )
         if not neighbors.get('ids') or not neighbors['ids'][0]:
-            logging.warning(f"LTM: Не найдено семантических соседей для факта {fact_id[:16]}.")
+            logging.warning(f"LTM: No semantic neighbors found for fact {fact_id[:16]}.")
             return
 
-        # Фильтруем соседей и собираем их ID и дистанции
+        # Filter neighbors and collect their IDs and distances
         neighbor_fact_data = []
         for i in range(len(neighbors['ids'][0])):
             neighbor_fact_id = neighbors['ids'][0][i]
@@ -291,17 +291,17 @@ class AssetExtractor:
             
             if neighbor_fact_id == fact_id:
                 continue
-            # config.GRAPH_ASSOCIATIVE_THRESHOLD - это порог схожести, а distance - расстояние
-            # 1.0 - distance = схожесть
+            # config.GRAPH_ASSOCIATIVE_THRESHOLD is similarity threshold, distance is distance
+            # 1.0 - distance = similarity
             if (1.0 - distance) < config.GRAPH_ASSOCIATIVE_THRESHOLD:
                 continue
             neighbor_fact_data.append({"id": neighbor_fact_id, "distance": distance})
 
         if not neighbor_fact_data:
-            logging.debug(f"LTM: Не найдено достаточно близких соседей для факта {fact_id[:16]}.")
+            logging.debug(f"LTM: No sufficiently close neighbors found for fact {fact_id[:16]}.")
             return
 
-        # --- Шаг 3: Пакетная загрузка всех активов, связанных с найденными соседями ---
+        # --- Step 3: Batch load all assets linked to found neighbors ---
         all_neighbor_fact_ids = [n['id'] for n in neighbor_fact_data]
         all_linked_assets_records = await asyncio.to_thread(
             self.assets_collection.get,
@@ -309,16 +309,16 @@ class AssetExtractor:
             include=["metadatas"]
         )
 
-        # Группируем найденные активы по fact_id для удобного и быстрого доступа
+        # Group found assets by fact_id for convenient and fast access
         assets_by_fact_id = defaultdict(list)
         if all_linked_assets_records.get('ids'):
             for meta in all_linked_assets_records['metadatas']:
                 assets_by_fact_id[meta['fact_id']].append(meta)
 
-        # --- Шаг 4: Обработка и создание/обновление рёбер в графе ---
+        # --- Step 4: Process and create/update edges in graph ---
         tasks = []
 
-        # Итерируемся по заранее отфильтрованному и подготовленному списку соседей
+        # Iterate through pre-filtered and prepared neighbor list
         for neighbor_data in neighbor_fact_data:
             neighbor_fact_id = neighbor_data['id']
             linked_assets_for_neighbor = assets_by_fact_id.get(neighbor_fact_id, [])
@@ -328,7 +328,7 @@ class AssetExtractor:
 
             similarity = 1.0 - neighbor_data['distance']
 
-            # Собираем уникальные ID родительских узлов для данного соседа
+            # Collect unique parent node IDs for this neighbor
             neighbor_parent_ids = {
                 meta.get('parent_id') for meta in linked_assets_for_neighbor
             }
@@ -337,7 +337,7 @@ class AssetExtractor:
                 if not neighbor_parent_id or parent_id == neighbor_parent_id:
                     continue
 
-                # Находим метаданные одного из активов-соседей
+                # Find metadata of one of the neighbor assets
                 neighbor_asset_metadata = next(
                     (meta for meta in linked_assets_for_neighbor if meta.get('parent_id') == neighbor_parent_id),
                     None
@@ -345,7 +345,7 @@ class AssetExtractor:
                 if not neighbor_asset_metadata:
                     continue
 
-                # Создаем асинхронную задачу для обновления ребра
+                # Create async task for edge update
                 task = asyncio.create_task(
                     graph_manager.add_or_update_edge(
                         parent_id,
@@ -357,7 +357,7 @@ class AssetExtractor:
                 )
                 tasks.append(task)
 
-        # Дожидаемся выполнения всех задач по обновлению графа
+        # Wait for all graph update tasks to complete
         if tasks:
             await asyncio.gather(*tasks)
-            logging.info(f"Граф обновлен для актива {asset_id}. Добавлено/обновлено {len(tasks)} рёбер.")
+            logging.info(f"Graph updated for asset {asset_id}. Added/updated {len(tasks)} edges.")

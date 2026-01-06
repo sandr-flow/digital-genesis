@@ -28,44 +28,44 @@ class ReflectionEngine:
         """Execute one reflection cycle with full error handling."""
         try:
             self.thought_logger.info("--- START FOCUSED REFLECTION CYCLE ---")
-            self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Поиск горячих записей для рефлексии...")
+            self.concepts_logger.info("REFLECTION: Searching for hot records...")
 
-            # Проверяем наличие необходимых конфигураций
+            # Check required configurations
             if not hasattr(config, 'REFLECTION_MIN_ACCESS_COUNT'):
-                self.concepts_logger.error("🔄 РЕФЛЕКСИЯ: REFLECTION_MIN_ACCESS_COUNT не найден в конфигурации")
+                self.concepts_logger.error("REFLECTION: REFLECTION_MIN_ACCESS_COUNT not found in config")
                 return
 
             if not hasattr(config, 'REFLECTION_CLUSTER_SIZE'):
-                self.concepts_logger.error("🔄 РЕФЛЕКСИЯ: REFLECTION_CLUSTER_SIZE не найден в конфигурации")
+                self.concepts_logger.error("REFLECTION: REFLECTION_CLUSTER_SIZE not found in config")
                 return
 
             if not hasattr(config, 'REFLECTION_PROMPT_TEMPLATE'):
-                self.concepts_logger.error("🔄 РЕФЛЕКСИЯ: REFLECTION_PROMPT_TEMPLATE не найден в конфигурации")
+                self.concepts_logger.error("REFLECTION: REFLECTION_PROMPT_TEMPLATE not found in config")
                 return
 
-            # Получаем "зерно" для рефлексии
+            # Get reflection seed
             seed = self.ltm.get_random_hot_record_as_seed(config.REFLECTION_MIN_ACCESS_COUNT)
             if not seed:
                 self.thought_logger.info("No hot records to serve as a seed. Skipping reflection.")
-                self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Горячие записи не найдены, пропуск цикла")
+                self.concepts_logger.info("REFLECTION: No hot records found, skipping cycle")
                 return
 
             self.thought_logger.info(f"Reflection seed chosen: '{seed['doc'][:80]}...'")
-            self.concepts_logger.info(f"🔄 РЕФЛЕКСИЯ: Выбрано зерно рефлексии: ID={seed['id']}")
+            self.concepts_logger.info(f"REFLECTION: Seed chosen: ID={seed['id']}")
 
-            # Формируем семантический кластер
+            # Form semantic cluster
             reflection_cluster = self.ltm.get_semantic_cluster(
                 seed_doc=seed['doc'], 
                 cluster_size=config.REFLECTION_CLUSTER_SIZE
             )
             if not reflection_cluster:
                 self.thought_logger.info("Could not form a semantic cluster around the seed. Skipping.")
-                self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Не удалось сформировать семантический кластер")
+                self.concepts_logger.info("REFLECTION: Could not form semantic cluster")
                 return
 
-            self.concepts_logger.info(f"🔄 РЕФЛЕКСИЯ: Сформирован кластер из {len(reflection_cluster)} записей")
+            self.concepts_logger.info(f"REFLECTION: Cluster formed with {len(reflection_cluster)} records")
 
-            # Формируем промпт для рефлексии
+            # Form reflection prompt
             try:
                 memories_for_prompt = []
                 for mem in reflection_cluster:
@@ -76,25 +76,25 @@ class ReflectionEngine:
 
                 memories_str = "\n".join(f"- {mem}" for mem in memories_for_prompt)
                 reflection_prompt = config.REFLECTION_PROMPT_TEMPLATE.format(hot_memories=memories_str)
-                self.concepts_logger.info(f"🔄 РЕФЛЕКСИЯ: Сформирован промпт длиной {len(reflection_prompt)} символов")
+                self.concepts_logger.info(f"REFLECTION: Prompt formed, length {len(reflection_prompt)} chars")
             except Exception as e:
-                self.concepts_logger.error(f"🔄 РЕФЛЕКСИЯ: Ошибка при формировании промпта: {e}", exc_info=True)
+                self.concepts_logger.error(f"REFLECTION: Error forming prompt: {e}", exc_info=True)
                 return
 
-            # Генерируем мысль
+            # Generate thought
             thought_text = await self._generate_thought(reflection_prompt)
             if not thought_text:
                 return
 
-            # Сохраняем и обрабатываем результат
+            # Save and process result
             await self._save_and_process(thought_text, reflection_cluster)
 
             self.thought_logger.info("--- END FOCUSED REFLECTION CYCLE ---")
-            self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Цикл рефлексии завершен успешно")
+            self.concepts_logger.info("REFLECTION: Cycle completed successfully")
 
         except Exception as e:
-            logging.error(f"КРИТИЧЕСКАЯ ОШИБКА в цикле рефлексии: {e}", exc_info=True)
-            self.concepts_logger.error(f"🔄 РЕФЛЕКСИЯ: КРИТИЧЕСКАЯ ОШИБКА цикла: {e}", exc_info=True)
+            logging.error(f"CRITICAL ERROR in reflection cycle: {e}", exc_info=True)
+            self.concepts_logger.error(f"REFLECTION: CRITICAL ERROR: {e}", exc_info=True)
 
     async def _generate_thought(self, reflection_prompt: str) -> str | None:
         """Generate a thought using the main or backup model.
@@ -108,30 +108,30 @@ class ReflectionEngine:
         thought_text = None
         
         try:
-            self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Отправка запроса к основной модели...")
+            self.concepts_logger.info("REFLECTION: Sending request to main model...")
             
             reflection_model = gemini_client.create_reflection_model()
             response = await reflection_model.generate_content_async(reflection_prompt)
             thought_text = response.text
-            self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Получен ответ от основной модели")
+            self.concepts_logger.info("REFLECTION: Response received from main model")
 
         except Exception as e:
             logging.error(f"Reflection error with main model: {e}", exc_info=True)
-            self.concepts_logger.warning(f"🔄 РЕФЛЕКСИЯ: Ошибка основной модели, переключение на резервную: {e}")
+            self.concepts_logger.warning(f"REFLECTION: Main model error, switching to backup: {e}"))
 
-            # Проверяем наличие резервной модели
+            # Check backup model availability
             if not hasattr(config, 'GEMINI_BACKUP_MODEL_NAME'):
-                self.concepts_logger.error("🔄 РЕФЛЕКСИЯ: GEMINI_BACKUP_MODEL_NAME не найден в конфигурации")
+                self.concepts_logger.error("REFLECTION: GEMINI_BACKUP_MODEL_NAME not found in config")
                 return None
 
             try:
                 backup_model = gemini_client.create_backup_reflection_model()
                 response = await backup_model.generate_content_async(reflection_prompt)
                 thought_text = response.text
-                self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Получен ответ от резервной модели")
+                self.concepts_logger.info("REFLECTION: Response received from backup model")
             except Exception as e2:
                 logging.error(f"Reflection failed with backup model: {e2}", exc_info=True)
-                self.concepts_logger.error(f"🔄 РЕФЛЕКСИЯ: Критическая ошибка, цикл прерван: {e2}")
+                self.concepts_logger.error(f"REFLECTION: Critical error, cycle aborted: {e2}")
                 return None
 
         return thought_text
@@ -144,39 +144,39 @@ class ReflectionEngine:
             reflection_cluster: Cluster of records that spawned the thought.
         """
         if not thought_text or not thought_text.strip():
-            self.concepts_logger.warning("🔄 РЕФЛЕКСИЯ: Получен пустой или некорректный текст мысли")
+            self.concepts_logger.warning("REFLECTION: Empty or invalid thought text received")
             return
 
         self.thought_logger.info(f"Generated thought: '{thought_text}'")
         self.reflections_logger.info(thought_text)
-        self.concepts_logger.info(f"🔄 РЕФЛЕКСИЯ: Сгенерирована мысль длиной {len(thought_text)} символов")
+        self.concepts_logger.info(f"REFLECTION: Thought generated, length {len(thought_text)} chars"))
 
         try:
-            # Рассчитываем начальный счетчик доступа
+            # Calculate initial access count
             parent_counts = [mem.get('access_count', 0) for mem in reflection_cluster]
             initial_thought_ac = round(statistics.median(parent_counts)) if parent_counts else 0
 
-            # Сохраняем рефлексию
+            # Save reflection
             reflection_id = await self.ltm.save_reflection(
                 reflection_text=thought_text,
                 initial_access_count=initial_thought_ac
             )
-            self.concepts_logger.info(f"🔄 РЕФЛЕКСИЯ: Рефлексия сохранена с ID={reflection_id}")
+            self.concepts_logger.info(f"REFLECTION: Saved with ID={reflection_id}")
 
-            # Извлечение активов для рефлексии
-            self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Запуск извлечения активов...")
+            # Extract assets for reflection
+            self.concepts_logger.info("REFLECTION: Starting asset extraction...")
             await self._safe_extract_assets(reflection_id, "REFLECTION")
 
-            # Охлаждение записей
+            # Cool down records
             cluster_ids = [rec.get('id') for rec in reflection_cluster if rec.get('id')]
             if cluster_ids:
                 self.ltm.cooldown_records_by_ids(cluster_ids)
-                self.concepts_logger.info(f"🔄 РЕФЛЕКСИЯ: Выполнено охлаждение {len(cluster_ids)} записей кластера")
+                self.concepts_logger.info(f"REFLECTION: Cooled down {len(cluster_ids)} cluster records")
             else:
-                self.concepts_logger.warning("🔄 РЕФЛЕКСИЯ: Нет ID для охлаждения записей")
+                self.concepts_logger.warning("REFLECTION: No IDs for record cooldown")
 
         except Exception as e:
-            self.concepts_logger.error(f"🔄 РЕФЛЕКСИЯ: Ошибка при сохранении рефлексии: {e}", exc_info=True)
+            self.concepts_logger.error(f"REFLECTION: Error saving reflection: {e}", exc_info=True)
 
     async def _safe_extract_assets(self, parent_id: str, description: str):
         """Safely extract assets with full error logging.
@@ -185,18 +185,18 @@ class ReflectionEngine:
             parent_id: Parent record ID.
             description: Record description for logging.
         """
-        self.concepts_logger.info(f"=== НАЧАЛО ИЗВЛЕЧЕНИЯ АКТИВОВ ===")
+        self.concepts_logger.info(f"=== START ASSET EXTRACTION ===")
         self.concepts_logger.info(f"Parent ID: {parent_id}")
         self.concepts_logger.info(f"Description: {description}")
 
         try:
             await self.ltm.extract_and_process_assets(parent_id=parent_id)
-            self.concepts_logger.info(f"✓ Успешно завершено извлечение активов для {parent_id} ({description})")
+            self.concepts_logger.info(f"Asset extraction completed for {parent_id} ({description})")
         except Exception as e:
             self.concepts_logger.error(
-                f"✗ ОШИБКА при извлечении активов для {parent_id} ({description}): {e}", 
+                f"ERROR extracting assets for {parent_id} ({description}): {e}", 
                 exc_info=True
             )
-            logging.error(f"КРИТИЧЕСКАЯ ОШИБКА АКТИВОВ [{parent_id}]: {e}", exc_info=True)
+            logging.error(f"CRITICAL ASSET ERROR [{parent_id}]: {e}", exc_info=True)
 
-        self.concepts_logger.info(f"=== КОНЕЦ ИЗВЛЕЧЕНИЯ АКТИВОВ ===")
+        self.concepts_logger.info(f"=== END ASSET EXTRACTION ===")
