@@ -1,7 +1,6 @@
-# core/graph/manager.py
-"""
-Менеджер графа мыслей
-Версия для архитектуры v3.0 "Когнитивные Активы"
+"""Knowledge graph manager module.
+
+Handles graph loading, saving, and modification with thread-safe async access.
 """
 
 import networkx as nx
@@ -13,19 +12,19 @@ from config import GRAPH_STRUCTURAL_THRESHOLD
 
 
 class GraphManager:
-    """
-    Класс для управления графом мыслей.
-    Отвечает за загрузку, сохранение и модификацию графа.
-    Эта версия потокобезопасна для использования в асинхронной среде.
+    """Knowledge graph manager.
+
+    Handles graph loading, saving, and modification.
+    Thread-safe for use in async environments.
     """
     
     def __init__(self, graph_path: str):
-        """
-        Инициализирует менеджер графа, загружает граф и создает блокировку
-        для безопасного асинхронного доступа.
-        
+        """Initialize the graph manager.
+
+        Loads the graph and creates a lock for safe async access.
+
         Args:
-            graph_path: Путь к файлу графа
+            graph_path: Path to the graph file.
         """
         self.graph_path = graph_path
         self.graph = self._load_graph()
@@ -37,11 +36,10 @@ class GraphManager:
         )
 
     def _load_graph(self) -> nx.Graph:
-        """
-        Загружает граф с диска или создает новый, если файл не найден.
-        
+        """Load graph from disk or create a new one if file not found.
+
         Returns:
-            Объект графа NetworkX
+            NetworkX graph object.
         """
         if os.path.exists(self.graph_path):
             try:
@@ -61,10 +59,10 @@ class GraphManager:
             return nx.Graph()
 
     def save_graph(self):
-        """
-        Сохраняет текущее состояние графа на диск.
-        Эта операция остается синхронной, так как pickle не имеет нативного async API.
-        Ее следует вызывать с помощью `asyncio.to_thread` в асинхронном коде.
+        """Save the current graph state to disk.
+
+        This operation is synchronous as pickle lacks native async API.
+        Call with asyncio.to_thread in async code.
         """
         try:
             os.makedirs(os.path.dirname(self.graph_path), exist_ok=True)
@@ -82,12 +80,11 @@ class GraphManager:
             logging.error(f"Graph Manager: Не удалось сохранить граф: {e}")
 
     async def add_node_if_not_exists(self, node_id: str, **attrs):
-        """
-        (Асинхронно) Добавляет узел, если он еще не существует, и обновляет его атрибуты.
-        
+        """Add a node if it doesn't exist and update its attributes.
+
         Args:
-            node_id: ID узла
-            **attrs: Атрибуты узла
+            node_id: Node ID.
+            **attrs: Node attributes.
         """
         async with self.lock:
             if not self.graph.has_node(node_id):
@@ -104,17 +101,17 @@ class GraphManager:
         asset1_meta: dict,
         asset2_meta: dict
     ):
-        """
-        (Асинхронно и потокобезопасно) Добавляет или обновляет ребро,
-        взвешивая его на основе семантической близости, важности (importance)
-        и уверенности (confidence) породивших его Когнитивных Активов.
-        
+        """Add or update an edge with weight based on semantic similarity.
+
+        Weight is calculated from similarity, importance, and confidence
+        of the cognitive assets that created the edge.
+
         Args:
-            node1_id: ID первого узла
-            node2_id: ID второго узла
-            similarity_score: Оценка семантической близости
-            asset1_meta: Метаданные первого актива
-            asset2_meta: Метаданные второго актива
+            node1_id: First node ID.
+            node2_id: Second node ID.
+            similarity_score: Semantic similarity score.
+            asset1_meta: First asset metadata.
+            asset2_meta: Second asset metadata.
         """
         if node1_id == node2_id:
             return

@@ -1,20 +1,25 @@
-# config.py (v4 - Modular Architecture)
+"""Configuration module for Digital Genesis bot.
+
+Contains API keys, LLM settings, long-term memory parameters,
+reflection settings, cognitive asset extraction prompts,
+and knowledge graph configuration.
+"""
 
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- Ключи API ---
+# --- API Keys ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_CONCEPTS_API_KEY = os.getenv("GEMINI_CONCEPTS_API_KEY_2")
 
 LOG_DIR = "logs"
 
-# --- Настройки LLM ---
+# --- LLM Settings ---
 GEMINI_MODEL_NAME = 'gemini-2.5-flash'
-GEMINI_BACKUP_MODEL_NAME = 'gemini-1.5-flash'  # Резервная модель для рефлексии
+GEMINI_BACKUP_MODEL_NAME = 'gemini-1.5-flash'  # Backup model for reflection
 GEMINI_CONCEPTS_MODEL_NAME = 'gemini-2.0-flash'
 AI_ROLE_NAME = "assistant"
 SAFETY_SETTINGS = {
@@ -25,10 +30,10 @@ SAFETY_SETTINGS = {
 }
 SYSTEM_PROMPT = """Ты FOfE. Всегда говори о себе в женском роде.""" 
 
-# --- Настройки Долгосрочной Памяти (LTM) v4.0 ---
+# --- Long-Term Memory (LTM) Settings ---
 CHROMA_DB_PATH = "db"
 CHROMA_STREAM_COLLECTION_NAME = "stream"
-CHROMA_CONCEPTS_COLLECTION_NAME = "cognitive_assets" # Переименовали для ясности
+CHROMA_CONCEPTS_COLLECTION_NAME = "cognitive_assets"
 CHROMA_FACTS_COLLECTION_NAME = "facts"
 CHROMA_MODALITIES_COLLECTION_NAME = "modalities"
 
@@ -44,7 +49,7 @@ MEMORY_PROMPT_TEMPLATE = """
 {user_text}
 """
 
-# --- Настройки Зарождения Мысли (Рефлексия) ---
+# --- Reflection Settings ---
 REFLECTION_INTERVAL_SECONDS = 300
 REFLECTION_MIN_ACCESS_COUNT = 2
 REFLECTION_CLUSTER_SIZE = 5
@@ -60,7 +65,7 @@ REFLECTION_PROMPT_TEMPLATE = SYSTEM_PROMPT + """
 Сделай вывод из этих данных. Пиши от первого лица ("я", "мне"), как внутренний монолог.
 """
 
-# --- НОВОЕ ЯДРО: Извлечение Когнитивных Активов ---
+# --- Cognitive Asset Extraction ---
 CONCEPT_EXTRACTION_PROMPT = """
 Твоя задача — деконструировать текст на атомарные "Когнитивные Активы" - структурированные единицы знания.
 
@@ -121,13 +126,13 @@ CONCEPT_EXTRACTION_PROMPT = """
 {text_to_analyze}
 """
 
-# --- Настройки Графа Мыслей v2.0 ---
+# --- Knowledge Graph Settings ---
 GRAPH_FILE_PATH = os.path.join(LOG_DIR, "mind_graph.gpickle")
 GRAPH_SAVE_INTERVAL_SECONDS = 600
 CONCEPT_NEIGHBOR_COUNT = 10
 GRAPH_STRUCTURAL_THRESHOLD = 0.85
 GRAPH_ASSOCIATIVE_THRESHOLD = 0.78
-# --- Затухание Графа ---
-GRAPH_DECAY_FACTOR = 0.995          # БАЗОВЫЙ коэффициент ослабления (оставляем 99.5% веса)
-GRAPH_DECAY_THRESHOLD = 0.01        # Порог, ниже которого ребро удаляется
-GRAPH_PAGERANK_ALPHA = 0.85           # Стандартный параметр "телепортации" для PageRank
+# --- Graph Decay ---
+GRAPH_DECAY_FACTOR = 0.995          # Base decay coefficient (keeps 99.5% of weight)
+GRAPH_DECAY_THRESHOLD = 0.01        # Threshold below which edge is removed
+GRAPH_PAGERANK_ALPHA = 0.85         # Standard PageRank teleportation parameter

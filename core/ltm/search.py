@@ -1,39 +1,33 @@
-# core/ltm/search.py
-"""
-Модуль поиска и обновления записей в долгосрочной памяти
-"""
+"""Search and record update module for long-term memory."""
 
 import logging
 import random
 
 
 class SearchManager:
-    """
-    Менеджер поиска в долгосрочной памяти.
-    Отвечает за поиск релевантных записей, формирование кластеров и охлаждение.
+    """Long-term memory search manager.
+
+    Handles relevant record search, cluster formation, and cooldown.
     """
     
     def __init__(self, stream_collection):
-        """
-        Инициализирует менеджер поиска
-        
+        """Initialize the search manager.
+
         Args:
-            stream_collection: Коллекция ChromaDB для основного потока
+            stream_collection: ChromaDB collection for the main stream.
         """
         self.stream_collection = stream_collection
     
     def search_and_update(self, query_text: str, n_results: int, where_filter: dict = None) -> tuple[list[str], list[int]]:
-        """
-        Ищет в основной коллекции stream релевантные записи, обновляет их счетчик
-        доступа и возвращает их в виде отформатированных строк.
-        
+        """Search for relevant records and update their access counts.
+
         Args:
-            query_text: Текст запроса для поиска
-            n_results: Количество результатов
-            where_filter: Фильтр для поиска (опционально)
-            
+            query_text: Query text for search.
+            n_results: Number of results to return.
+            where_filter: Optional filter for search.
+
         Returns:
-            Кортеж (список отформатированных воспоминаний, список счетчиков доступа)
+            Tuple of (formatted memory strings, access counts).
         """
         if n_results == 0:
             return [], []
@@ -82,15 +76,15 @@ class SearchManager:
             return [], []
     
     def get_random_hot_record_as_seed(self, min_access_count: int) -> dict | None:
-        """
-        Получает случайную "горячую" запись для использования в качестве зерна рефлексии.
-        Вероятность выбора пропорциональна счетчику доступа.
-        
+        """Get a random hot record to use as a reflection seed.
+
+        Selection probability is proportional to access count.
+
         Args:
-            min_access_count: Минимальный счетчик доступа
-            
+            min_access_count: Minimum access count threshold.
+
         Returns:
-            Словарь с данными записи или None, если записи не найдены
+            Record data dict or None if no records found.
         """
         if min_access_count <= 0:
             min_access_count = 1
@@ -121,15 +115,14 @@ class SearchManager:
             return None
 
     def get_semantic_cluster(self, seed_doc: str, cluster_size: int) -> list[dict]:
-        """
-        Формирует семантический кластер записей вокруг заданного "зерна"
-        
+        """Form a semantic cluster of records around a seed.
+
         Args:
-            seed_doc: Текст "зерна" для поиска
-            cluster_size: Размер кластера
-            
+            seed_doc: Seed text for search.
+            cluster_size: Number of records in the cluster.
+
         Returns:
-            Список словарей с данными записей кластера
+            List of record data dicts.
         """
         try:
             results = self.stream_collection.query(
@@ -154,11 +147,10 @@ class SearchManager:
             return []
 
     def cooldown_records_by_ids(self, ids: list[str]):
-        """
-        Охлаждает записи, уменьшая их счетчик доступа вдвое
-        
+        """Cool down records by halving their access counts.
+
         Args:
-            ids: Список ID записей для охлаждения
+            ids: List of record IDs to cool down.
         """
         if not ids:
             return
@@ -185,14 +177,13 @@ class SearchManager:
             logging.error(f"LTM Cooldown: Ошибка при 'охлаждении': {e}")
 
     def get_records_by_ids(self, ids: list[str]) -> list[dict] | None:
-        """
-        Получает записи по списку ID
-        
+        """Retrieve records by their IDs.
+
         Args:
-            ids: Список ID записей
-            
+            ids: List of record IDs.
+
         Returns:
-            Список словарей с данными записей или None
+            List of record data dicts or None.
         """
         if not ids:
             return None

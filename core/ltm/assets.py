@@ -1,7 +1,4 @@
-# core/ltm/assets.py
-"""
-Модуль для извлечения и обработки когнитивных активов
-"""
+"""Cognitive asset extraction and processing module."""
 
 import logging
 import json
@@ -14,20 +11,19 @@ from core.graph import graph_manager
 
 
 class AssetExtractor:
-    """
-    Экстрактор когнитивных активов.
-    Отвечает за извлечение активов из текста, их сохранение и обновление графа.
+    """Cognitive asset extractor.
+
+    Handles asset extraction from text, storage, and graph updates.
     """
     
     def __init__(self, stream_collection, assets_collection, fact_manager, gemini_client):
-        """
-        Инициализирует экстрактор активов
-        
+        """Initialize the asset extractor.
+
         Args:
-            stream_collection: Коллекция основного потока
-            assets_collection: Коллекция активов
-            fact_manager: Менеджер фактов и модальностей
-            gemini_client: Клиент Gemini API
+            stream_collection: Main stream collection.
+            assets_collection: Assets collection.
+            fact_manager: Facts and modalities manager.
+            gemini_client: Gemini API client.
         """
         self.stream_collection = stream_collection
         self.assets_collection = assets_collection
@@ -37,19 +33,18 @@ class AssetExtractor:
     
     @staticmethod
     def _get_hash(text: str) -> str:
-        """Вычисляет SHA-256 хеш от текста"""
+        """Compute SHA-256 hash of text."""
         return hashlib.sha256(text.encode('utf-8')).hexdigest()
     
     @staticmethod
     def _get_context_phrase_for_llm(role: str) -> str:
-        """
-        Формирует контекстную фразу для LLM в зависимости от роли
-        
+        """Generate a context phrase for LLM based on role.
+
         Args:
-            role: Роль автора текста
-            
+            role: Text author role.
+
         Returns:
-            Контекстная фраза
+            Context phrase.
         """
         if role == 'user':
             return "Проанализируй этот текст. Это реплика твоего собеседника (пользователя)."
@@ -60,11 +55,10 @@ class AssetExtractor:
         return f"Проанализируй этот текст. Это реплика, произнесенная {role}."
     
     def _get_concepts_model(self):
-        """
-        Получает или создаёт модель для извлечения концептов
-        
+        """Get or create the concepts extraction model.
+
         Returns:
-            Модель Gemini или None
+            Gemini model or None.
         """
         if self._concepts_model_instance is None:
             self._concepts_model_instance = self.gemini_client.create_concepts_model()
@@ -73,12 +67,12 @@ class AssetExtractor:
         return self._concepts_model_instance
     
     async def extract_and_process_assets(self, parent_id: str):
-        """
-        Извлекает и обрабатывает когнитивные активы из родительской записи
-        Использует Structured Output API для гарантированного получения JSON
-        
+        """Extract and process cognitive assets from a parent record.
+
+        Uses Structured Output API for guaranteed JSON response.
+
         Args:
-            parent_id: ID родительской записи в stream
+            parent_id: Parent record ID in stream.
         """
         logging.info(f"LTM: Начинаю извлечение Когнитивных Активов для родителя {parent_id}")
         
@@ -196,17 +190,16 @@ class AssetExtractor:
             logging.warning("LTM: Экземпляр модели активов сброшен из-за ошибки.")
 
     def _add_or_update_cognitive_asset(self, asset_data: dict, parent_id: str, fact_id: str, modality_id: str) -> str:
-        """
-        Добавляет или обновляет когнитивный актив
-        
+        """Add or update a cognitive asset.
+
         Args:
-            asset_data: Данные актива
-            parent_id: ID родительской записи
-            fact_id: ID факта
-            modality_id: ID модальности
-            
+            asset_data: Asset data.
+            parent_id: Parent record ID.
+            fact_id: Fact ID.
+            modality_id: Modality ID.
+
         Returns:
-            ID актива
+            Asset ID.
         """
         asset_hash = self._get_hash(f"{fact_id}:{modality_id}")
         existing = self.assets_collection.get(where={"hash": {"$eq": asset_hash}})
@@ -238,17 +231,16 @@ class AssetExtractor:
             return new_asset_id
 
     async def _rebuild_graph_for_asset(self, asset_id: str):
-        """
-        Асинхронно и эффективно обновляет граф на основе семантической близости фактов.
-        
-        Ключевые улучшения:
-        - Истинно асинхронная работа с помощью asyncio.to_thread для блокирующих вызовов БД
-        - Решена проблема "N+1 запроса" за счет пакетной загрузки данных
-        - Исключены избыточные обновления рёбер для одной и той же пары узлов
-        - Используются потокобезопасные методы graph_manager
-        
+        """Asynchronously update the graph based on semantic fact similarity.
+
+        Key improvements:
+        - Truly async with asyncio.to_thread for blocking DB calls
+        - Solved N+1 query problem with batch data loading
+        - Eliminated redundant edge updates for same node pairs
+        - Uses thread-safe graph_manager methods
+
         Args:
-            asset_id: ID когнитивного актива
+            asset_id: Cognitive asset ID.
         """
         logging.debug(f"LTM: Начинаю обновление графа для Когнитивного Актива {asset_id}")
 

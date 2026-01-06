@@ -1,7 +1,4 @@
-# core/reflection/engine.py
-"""
-Движок рефлексии - фоновое мышление системы
-"""
+"""Reflection engine module - background thinking system."""
 
 import logging
 import statistics
@@ -11,17 +8,16 @@ import config
 
 
 class ReflectionEngine:
-    """
-    Движок рефлексии, отвечающий за фоновое мышление системы.
-    Анализирует "горячие" записи и генерирует озарения.
+    """Reflection engine for background system thinking.
+
+    Analyzes hot records and generates insights.
     """
     
     def __init__(self, ltm_manager):
-        """
-        Инициализирует движок рефлексии
-        
+        """Initialize the reflection engine.
+
         Args:
-            ltm_manager: Экземпляр менеджера долгосрочной памяти
+            ltm_manager: Long-term memory manager instance.
         """
         self.ltm = ltm_manager
         self.thought_logger = get_thought_logger()
@@ -29,9 +25,7 @@ class ReflectionEngine:
         self.concepts_logger = get_concepts_logger()
     
     async def run_cycle(self):
-        """
-        Выполняет один цикл рефлексии с полной обработкой ошибок
-        """
+        """Execute one reflection cycle with full error handling."""
         try:
             self.thought_logger.info("--- START FOCUSED REFLECTION CYCLE ---")
             self.concepts_logger.info("🔄 РЕФЛЕКСИЯ: Поиск горячих записей для рефлексии...")
@@ -103,14 +97,13 @@ class ReflectionEngine:
             self.concepts_logger.error(f"🔄 РЕФЛЕКСИЯ: КРИТИЧЕСКАЯ ОШИБКА цикла: {e}", exc_info=True)
 
     async def _generate_thought(self, reflection_prompt: str) -> str | None:
-        """
-        Генерирует мысль с использованием основной или резервной модели
-        
+        """Generate a thought using the main or backup model.
+
         Args:
-            reflection_prompt: Промпт для рефлексии
-            
+            reflection_prompt: Reflection prompt.
+
         Returns:
-            Сгенерированный текст мысли или None в случае ошибки
+            Generated thought text or None on error.
         """
         thought_text = None
         
@@ -144,12 +137,11 @@ class ReflectionEngine:
         return thought_text
 
     async def _save_and_process(self, thought_text: str, reflection_cluster: list):
-        """
-        Сохраняет рефлексию и обрабатывает кластер
-        
+        """Save reflection and process the cluster.
+
         Args:
-            thought_text: Текст сгенерированной мысли
-            reflection_cluster: Кластер записей, породивших мысль
+            thought_text: Generated thought text.
+            reflection_cluster: Cluster of records that spawned the thought.
         """
         if not thought_text or not thought_text.strip():
             self.concepts_logger.warning("🔄 РЕФЛЕКСИЯ: Получен пустой или некорректный текст мысли")
@@ -187,12 +179,11 @@ class ReflectionEngine:
             self.concepts_logger.error(f"🔄 РЕФЛЕКСИЯ: Ошибка при сохранении рефлексии: {e}", exc_info=True)
 
     async def _safe_extract_assets(self, parent_id: str, description: str):
-        """
-        Безопасное извлечение активов с полным логированием ошибок
-        
+        """Safely extract assets with full error logging.
+
         Args:
-            parent_id: ID родительской записи
-            description: Описание записи для логирования
+            parent_id: Parent record ID.
+            description: Record description for logging.
         """
         self.concepts_logger.info(f"=== НАЧАЛО ИЗВЛЕЧЕНИЯ АКТИВОВ ===")
         self.concepts_logger.info(f"Parent ID: {parent_id}")

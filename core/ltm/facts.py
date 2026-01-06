@@ -1,52 +1,47 @@
-# core/ltm/facts.py
-"""
-Модуль для работы с фактами и модальностями
-"""
+"""Facts and modalities management module."""
 
 import logging
 import hashlib
 
 
 class FactManager:
-    """
-    Менеджер для работы с фактами и модальностями.
-    Обеспечивает дедупликацию и управление этими сущностями.
+    """Manager for facts and modalities.
+
+    Handles deduplication and management of these entities.
     """
     
     def __init__(self, facts_collection, modalities_collection):
-        """
-        Инициализирует менеджер фактов
-        
+        """Initialize the fact manager.
+
         Args:
-            facts_collection: Коллекция ChromaDB для фактов
-            modalities_collection: Коллекция ChromaDB для модальностей
+            facts_collection: ChromaDB collection for facts.
+            modalities_collection: ChromaDB collection for modalities.
         """
         self.facts_collection = facts_collection
         self.modalities_collection = modalities_collection
     
     @staticmethod
     def _get_hash(text: str) -> str:
-        """
-        Вычисляет SHA-256 хеш от текста
-        
+        """Compute SHA-256 hash of text.
+
         Args:
-            text: Исходный текст
-            
+            text: Source text.
+
         Returns:
-            Хеш текста
+            Text hash.
         """
         return hashlib.sha256(text.encode('utf-8')).hexdigest()
     
     def get_or_create_fact(self, fact_text: str) -> str:
-        """
-        Получает существующий факт или создаёт новый.
-        Использует хеш для дедупликации.
-        
+        """Get an existing fact or create a new one.
+
+        Uses hash for deduplication.
+
         Args:
-            fact_text: Текст факта
-            
+            fact_text: Fact text.
+
         Returns:
-            ID факта
+            Fact ID.
         """
         fact_id = self._get_hash(fact_text)
         
@@ -57,15 +52,15 @@ class FactManager:
         return fact_id
 
     def get_or_create_modality(self, modality_text: str) -> str:
-        """
-        Получает существующую модальность или создаёт новую.
-        Модальность представляет ментальное действие (считает, боится, надеется и т.д.)
-        
+        """Get an existing modality or create a new one.
+
+        A modality represents a mental action (believes, fears, hopes, etc.).
+
         Args:
-            modality_text: Текст модальности (глагол)
-            
+            modality_text: Modality text (verb).
+
         Returns:
-            ID модальности
+            Modality ID.
         """
         modality_id = self._get_hash(modality_text)
         

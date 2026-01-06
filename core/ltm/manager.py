@@ -1,7 +1,6 @@
-# core/ltm/manager.py
-"""
-Главный менеджер долгосрочной памяти (LTM)
-Координирует работу всех подмодулей
+"""Long-term memory (LTM) manager module.
+
+Coordinates all LTM submodules and ChromaDB collections.
 """
 
 import chromadb
@@ -26,13 +25,13 @@ from .assets import AssetExtractor
 
 
 class LTM_Manager:
-    """
-    Главный менеджер долгосрочной памяти.
-    Координирует работу коллекций ChromaDB и делегирует задачи подмодулю.
+    """Main long-term memory manager.
+
+    Coordinates ChromaDB collections and delegates tasks to submodules.
     """
     
     def __init__(self):
-        """Инициализирует менеджер долгосрочной памяти и все подмодули"""
+        """Initialize the LTM manager and all submodules."""
         try:
             # Инициализация ChromaDB клиента
             self.client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
@@ -78,20 +77,19 @@ class LTM_Manager:
 
     @staticmethod
     def _get_hash(text: str) -> str:
-        """Вычисляет SHA-256 хеш от текста"""
+        """Compute SHA-256 hash of text."""
         return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
     async def _add_to_stream(self, text: str, role: str, initial_ac: int = 0) -> str:
-        """
-        Добавляет запись в основной поток (stream)
-        
+        """Add a record to the main stream.
+
         Args:
-            text: Текст записи
-            role: Роль (user, assistant, internal)
-            initial_ac: Начальный счетчик доступа
-            
+            text: Record text content.
+            role: Role (user, assistant, internal).
+            initial_ac: Initial access count.
+
         Returns:
-            ID созданной или найденной записи
+            ID of the created or existing record.
         """
         text_hash = self._get_hash(text)
         
@@ -132,16 +130,15 @@ class LTM_Manager:
         return new_id
 
     async def save_dialogue_pair(self, user_text: str, bot_text: str, bot_response_access_count: int = 0) -> tuple[str, str]:
-        """
-        Сохраняет пару реплик (пользователь и бот) в долгосрочную память
-        
+        """Save a dialogue pair (user and bot messages) to long-term memory.
+
         Args:
-            user_text: Текст сообщения пользователя
-            bot_text: Текст ответа бота
-            bot_response_access_count: Начальный счетчик доступа для ответа бота
-            
+            user_text: User message text.
+            bot_text: Bot response text.
+            bot_response_access_count: Initial access count for bot response.
+
         Returns:
-            Кортеж (ID записи пользователя, ID записи бота)
+            Tuple of (user record ID, bot record ID).
         """
         # Запускаем создание обеих записей параллельно
         user_task = asyncio.create_task(
@@ -155,15 +152,14 @@ class LTM_Manager:
         return user_id, bot_id
 
     async def save_reflection(self, reflection_text: str, initial_access_count: int = 0) -> str:
-        """
-        Сохраняет результат рефлексии в долгосрочную память
-        
+        """Save a reflection result to long-term memory.
+
         Args:
-            reflection_text: Текст рефлексии
-            initial_access_count: Начальный счетчик доступа
-            
+            reflection_text: Reflection text content.
+            initial_access_count: Initial access count.
+
         Returns:
-            ID записи рефлексии
+            Reflection record ID.
         """
         reflection_id = await self._add_to_stream(
             text=reflection_text,
@@ -172,28 +168,28 @@ class LTM_Manager:
         )
         return reflection_id
 
-    # Делегирование методов поиска
+    # Delegate search methods
     def search_and_update(self, query_text: str, n_results: int, where_filter: dict = None) -> tuple[list[str], list[int]]:
-        """Делегирует поиск SearchManager"""
+        """Delegate search to SearchManager."""
         return self.search_manager.search_and_update(query_text, n_results, where_filter)
 
     def get_random_hot_record_as_seed(self, min_access_count: int) -> dict | None:
-        """Делегирует получение "зерна" SearchManager"""
+        """Delegate seed retrieval to SearchManager."""
         return self.search_manager.get_random_hot_record_as_seed(min_access_count)
 
     def get_semantic_cluster(self, seed_doc: str, cluster_size: int) -> list[dict]:
-        """Делегирует формирование кластера SearchManager"""
+        """Delegate cluster formation to SearchManager."""
         return self.search_manager.get_semantic_cluster(seed_doc, cluster_size)
 
     def cooldown_records_by_ids(self, ids: list[str]):
-        """Делегирует охлаждение записей SearchManager"""
+        """Delegate record cooldown to SearchManager."""
         self.search_manager.cooldown_records_by_ids(ids)
 
     def get_records_by_ids(self, ids: list[str]) -> list[dict] | None:
-        """Делегирует получение записей по ID SearchManager"""
+        """Delegate record retrieval by ID to SearchManager."""
         return self.search_manager.get_records_by_ids(ids)
 
-    # Делегирование методов извлечения активов
+    # Delegate asset extraction methods
     async def extract_and_process_assets(self, parent_id: str):
-        """Делегирует извлечение активов AssetExtractor"""
+        """Delegate asset extraction to AssetExtractor."""
         await self.asset_extractor.extract_and_process_assets(parent_id)

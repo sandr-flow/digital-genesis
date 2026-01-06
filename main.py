@@ -1,7 +1,7 @@
-# main.py
-"""
-Точка входа для Telegram-бота "Цифровой Генезис"
-Архитектура v4.0 - Модульная структура
+"""Entry point for the Digital Genesis Telegram bot.
+
+This module initializes the bot, sets up handlers, configures
+the reflection scheduler, and starts the polling loop.
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from core.reflection.engine import ReflectionEngine
 from handlers import commands, messages
 
 
-# --- Настройка ---
+# --- Setup ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -30,23 +30,23 @@ if not config.TELEGRAM_BOT_TOKEN or not config.GEMINI_API_KEY:
         "Необходимо установить TELEGRAM_BOT_TOKEN и GEMINI_API_KEY в .env файле"
     )
 
-# Инициализация бота и диспетчера
+# Initialize bot and dispatcher
 bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
 
-# Словарь пользовательских чатов
+# User chat sessions
 user_chats = {}
 
-# Настройка логирования
+# Setup logging
 setup_logging()
 concepts_logger = get_concepts_logger()
 
-# Движок рефлексии
+# Reflection engine
 reflection_engine = ReflectionEngine(ltm)
 
 
 async def main():
-    """Основная асинхронная функция, которая запускает все компоненты."""
+    """Start all bot components and run the polling loop."""
     
     # Проверяем настройки концептов при запуске
     concepts_logger.info("=== ДИАГНОСТИКА СИСТЕМЫ КОНЦЕПТОВ ===")
