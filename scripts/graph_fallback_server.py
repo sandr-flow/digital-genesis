@@ -1,5 +1,7 @@
-# graph_fallback_server.py
-# Альтернативный сервер, который читает данные напрямую из графа
+"""Graph fallback server.
+
+Alternative server that reads data directly from the graph file.
+"""
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,20 +11,20 @@ import networkx as nx
 import sys
 import os
 
-# Добавляем корень проекта в путь для импорта config.py
+# Add project root to path for config.py import
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# Пытаемся импортировать конфиг
+# Try to import config
 try:
     from config import GRAPH_FILE_PATH, AI_ROLE_NAME
 except ImportError:
-    print("⚠️  Не найден config.py, использую значения по умолчанию")
+    print("Warning: config.py not found, using default values")
     GRAPH_FILE_PATH = "logs/mind_graph.gpickle"
     AI_ROLE_NAME = "assistant"
 
-app = FastAPI(title="Graph Memory API", description="API для получения данных узлов из NetworkX графа")
+app = FastAPI(title="Graph Memory API", description="API for retrieving node data from NetworkX graph")
 
 # CORS
 app.add_middleware(
@@ -33,38 +35,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Глобальная переменная для графа
+# Global variable for graph
 graph = None
 graph_error = None
 
 
 def load_graph():
-    """Загрузка графа при старте сервера"""
+    """Load graph at server startup."""
     global graph, graph_error
     try:
         if not os.path.exists(GRAPH_FILE_PATH):
-            graph_error = f"Файл графа не найден: {GRAPH_FILE_PATH}"
-            print(f"❌ {graph_error}")
+            graph_error = f"Graph file not found: {GRAPH_FILE_PATH}"
+            print(f"Error: {graph_error}")
             return False
 
         with open(GRAPH_FILE_PATH, 'rb') as f:
             graph = pickle.load(f)
 
-        print(f"✅ Граф загружен: {graph.number_of_nodes()} узлов, {graph.number_of_edges()} рёбер")
+        print(f"Graph loaded: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
         return True
 
     except Exception as e:
-        graph_error = f"Ошибка загрузки графа: {str(e)}"
-        print(f"❌ {graph_error}")
+        graph_error = f"Error loading graph: {str(e)}"
+        print(f"Error: {graph_error}")
         return False
 
 
-# Загружаем граф при запуске
+# Load graph on startup
 load_graph()
 
 
 @app.get("/")
 async def root():
+    """Root endpoint."""
     return {
         "message": "Graph Memory API Server",
         "graph_loaded": graph is not None,
@@ -75,6 +78,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint."""
     return {
         "status": "ok",
         "graph_available": graph is not None,
@@ -85,7 +89,7 @@ async def health_check():
 
 @app.get("/reload")
 async def reload_graph():
-    """Перезагрузка графа"""
+    """Reload graph."""
     success = load_graph()
     return {
         "success": success,
@@ -96,9 +100,9 @@ async def reload_graph():
 
 @app.get("/nodes")
 async def list_nodes():
-    """Список всех узлов"""
+    """List all nodes."""
     if graph is None:
-        raise HTTPException(status_code=503, detail="Граф недоступен")
+        raise HTTPException(status_code=503, detail="Graph unavailable")
 
     nodes_info = []
     for node_id, attrs in graph.nodes(data=True):
@@ -113,22 +117,23 @@ async def list_nodes():
 
 @app.get("/memory/{node_id}")
 async def get_memory(node_id: str):
+    """Get memory data for a specific node."""
     if graph is None:
-        raise HTTPException(status_code=503, detail=f"Граф недоступен: {graph_error}")
+        raise HTTPException(status_code=503, detail=f"Graph unavailable: {graph_error}")
 
     try:
-        # Проверяем, существует ли узел
+        # Check if node exists
         if node_id not in graph.nodes():
-            raise HTTPException(status_code=404, detail=f"Узел {node_id} не найден в графе")
+            raise HTTPException(status_code=404, detail=f"Node {node_id} not found in graph")
 
-        # Получаем атрибуты узла
+        # Get node attributes
         attrs = graph.nodes[node_id]
         role = attrs.get('role', 'unknown')
 
-        # Получаем соседей
+        # Get neighbors
         neighbors = list(graph.neighbors(node_id))
 
-        # Получаем рёбра
+        # Get edges
         edges_info = []
         for neighbor in neighbors:
             edge_data = graph.get_edge_data(node_id, neighbor, {})
@@ -138,36 +143,36 @@ async def get_memory(node_id: str):
                 "weight": edge_data.get('cumulative_weight', 1.0)
             })
 
-        # Пытаемся найти текстовое содержимое в атрибутах
-        content = attrs.get('content', attrs.get('text', attrs.get('document', 'Содержимое не найдено')))
+        # Try to find text content in attributes
+        content = attrs.get('content', attrs.get('text', attrs.get('document', 'Content not found')))
 
-        # Формируем HTML-ответ
+        # Format HTML response
         html_content = f"""
         <div style="font-family: Arial, sans-serif;">
-            <h3 style="color: #333; margin-top: 0;">Узел: {node_id}</h3>
-            <p><strong>Роль:</strong> <span style="color: {'#5CB85C' if role == 'user' else '#D9534F' if role == AI_ROLE_NAME else '#5BC0DE'};">{role.capitalize()}</span></p>
-            <p><strong>Соседей:</strong> {len(neighbors)}</p>
+            <h3 style="color: #333; margin-top: 0;">Node: {node_id}</h3>
+            <p><strong>Role:</strong> <span style="color: {'#5CB85C' if role == 'user' else '#D9534F' if role == AI_ROLE_NAME else '#5BC0DE'};">{role.capitalize()}</span></p>
+            <p><strong>Neighbors:</strong> {len(neighbors)}</p>
 
             <hr style="margin: 15px 0;">
 
-            <h4>Содержимое:</h4>
+            <h4>Content:</h4>
             <div style="background: #f5f5f5; padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto; border-left: 4px solid #ddd;">
                 {content}
             </div>
 
             <hr style="margin: 15px 0;">
 
-            <h4>Все атрибуты:</h4>
+            <h4>All attributes:</h4>
             <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
                 {format_attributes(attrs)}
             </div>
 
             {f'''
             <hr style="margin: 15px 0;">
-            <h4>Связи ({len(edges_info)}):</h4>
+            <h4>Connections ({len(edges_info)}):</h4>
             <div style="max-height: 150px; overflow-y: auto;">
-                {''.join([f"<div style='margin: 5px 0; padding: 5px; background: #f0f0f0; border-radius: 3px;'><strong>{edge['to']}</strong> ({edge['type']}) - вес: {edge['weight']:.2f}</div>" for edge in edges_info[:10]])}
-                {f"<div style='color: #666; font-style: italic;'>... и ещё {len(edges_info) - 10}</div>" if len(edges_info) > 10 else ""}
+                {''.join([f"<div style='margin: 5px 0; padding: 5px; background: #f0f0f0; border-radius: 3px;'><strong>{edge['to']}</strong> ({edge['type']}) - weight: {edge['weight']:.2f}</div>" for edge in edges_info[:10]])}
+                {f"<div style='color: #666; font-style: italic;'>... and {len(edges_info) - 10} more</div>" if len(edges_info) > 10 else ""}
             </div>
             ''' if edges_info else ''}
         </div>
@@ -178,14 +183,14 @@ async def get_memory(node_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Ошибка при получении данных узла {node_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}")
+        print(f"Error getting node data {node_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 def format_attributes(attrs):
-    """Форматирование атрибутов для отображения"""
+    """Format attributes for display."""
     if not attrs:
-        return "Нет атрибутов"
+        return "No attributes"
 
     formatted = []
     for key, value in attrs.items():
@@ -199,5 +204,5 @@ def format_attributes(attrs):
 if __name__ == "__main__":
     import uvicorn
 
-    print("🚀 Запуск Graph Memory API Server...")
+    print("Starting Graph Memory API Server...")
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")

@@ -1,63 +1,67 @@
-# check_chroma.py
+"""ChromaDB diagnostics script.
+
+Tests ChromaDB connection and embedding model functionality.
+"""
+
 import chromadb
 import time
 import os
 
-# Убедитесь, что путь к базе данных тот же, что и в вашем config.py
+# Make sure the database path matches your config.py
 DB_PATH = "db"
 COLLECTION_NAME = "test_collection"
 
-print(f"--- НАЧАЛО ДИАГНОСТИКИ CHROMA DB ---")
-print(f"Путь к базе данных: {os.path.abspath(DB_PATH)}")
+print(f"--- STARTING CHROMA DB DIAGNOSTICS ---")
+print(f"Database path: {os.path.abspath(DB_PATH)}")
 
 try:
-    # 1. Инициализируем клиент
+    # 1. Initialize client
     client = chromadb.PersistentClient(path=DB_PATH)
-    print("Шаг 1: Клиент ChromaDB успешно инициализирован.")
+    print("Step 1: ChromaDB client initialized successfully.")
 
-    # 2. Создаем или получаем тестовую коллекцию
+    # 2. Create or get test collection
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
-    print(f"Шаг 2: Коллекция '{COLLECTION_NAME}' получена/создана. Текущее количество записей: {collection.count()}")
+    print(f"Step 2: Collection '{COLLECTION_NAME}' obtained/created. Current record count: {collection.count()}")
 
-    # Очистим тестовую запись, если она осталась с прошлого раза
+    # Clean up test record if leftover from previous run
     collection.delete(ids=["test-doc-1"])
 
-    # 3. Добавляем один документ. В этот момент ChromaDB ДОЛЖНА начать
-    # скачивание/инициализацию модели эмбеддингов.
-    print("Шаг 3: Добавляю тестовый документ 'Это тест'. Ожидайте, это может занять до минуты...")
+    # 3. Add one document. At this point ChromaDB SHOULD start
+    # downloading/initializing the embedding model.
+    print("Step 3: Adding test document 'This is a test'. Please wait, this may take up to a minute...")
     collection.add(
-        documents=["Это тест"],
+        documents=["This is a test"],
         metadatas=[{'source': 'test'}],
         ids=["test-doc-1"]
     )
-    print("Шаг 3.1: Команда .add() выполнена. Начинаю проверку результата.")
+    print("Step 3.1: .add() command executed. Starting result verification.")
 
-    # 4. Ждем и проверяем, появился ли эмбеддинг
+    # 4. Wait and check if embedding appeared
     embedding_result = None
     for i in range(45):
-        print(f"  Попытка {i + 1}/45: Проверяю наличие эмбеддинга...")
+        print(f"  Attempt {i + 1}/45: Checking for embedding...")
         record = collection.get(ids=["test-doc-1"], include=["embeddings"])
         if record and record['embeddings'] and record['embeddings'][0] is not None:
-            print("\n[✓✓✓] УСПЕХ! Эмбеддинг успешно создан.")
+            print("\n[SUCCESS] Embedding created successfully.")
             embedding_result = record['embeddings'][0]
             break
         time.sleep(1)
 
-    # 5. Выводим финальный результат
-    print("\n--- РЕЗУЛЬТАТ ДИАГНОСТИКИ ---")
+    # 5. Output final result
+    print("\n--- DIAGNOSTICS RESULT ---")
     if embedding_result:
-        print("Статус: OK")
-        print(f"ChromaDB работает корректно и смогла создать эмбеддинг.")
-        print(f"Фрагмент эмбеддинга: {embedding_result[:5]}...")
+        print("Status: OK")
+        print(f"ChromaDB is working correctly and was able to create an embedding.")
+        print(f"Embedding fragment: {embedding_result[:5]}...")
     else:
-        print("[XXX] ПРОВАЛ!")
-        print("ChromaDB НЕ СМОГЛА создать эмбеддинг за 45 секунд.")
-        print("Наиболее вероятная причина: нет доступа к интернету или блокировка файрволом,")
-        print("необходимые для скачивания модели эмбеддингов с Hugging Face.")
+        print("[FAILED]")
+        print("ChromaDB COULD NOT create an embedding in 45 seconds.")
+        print("Most likely cause: no internet access or firewall blocking,")
+        print("required for downloading embedding model from Hugging Face.")
 
-    # Очистка
+    # Cleanup
     collection.delete(ids=["test-doc-1"])
-    print("\n--- ДИАГНОСТИКА ЗАВЕРШЕНА ---")
+    print("\n--- DIAGNOSTICS COMPLETE ---")
 
 except Exception as e:
-    print(f"\n[!!!] КРИТИЧЕСКАЯ ОШИБКА во время диагностики: {e}")
+    print(f"\n[CRITICAL ERROR] during diagnostics: {e}")
