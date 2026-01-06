@@ -1,75 +1,78 @@
-# concepts_inspector.py
+"""Concepts inspector script.
+
+Analyzes the "Conceptual Core" for semantic duplicates.
+"""
 
 import chromadb
 import pandas as pd
 from tqdm import tqdm
-import json  # Добавляем для работы с JSON-строками
+import json  # For JSON string handling
 import os
 
-# --- Настройки инспектора ---
-# Порог семантической близости для поиска дубликатов концептов.
-# Distance - это расстояние, чем оно меньше, тем ближе.
-# Для концептов порог должен быть строже, чем для стрима,
-# так как мы ищем практически синонимичные утверждения.
-# Хорошее начальное значение: 0.1
+# --- Inspector settings ---
+# Semantic similarity threshold for duplicate concept detection.
+# Distance is the metric, lower means closer.
+# For concepts, threshold should be stricter than for stream,
+# as we're looking for nearly synonymous statements.
+# Good starting value: 0.1
 SEMANTIC_DUPLICATE_THRESHOLD_DISTANCE = 0.1
 
-# --- Конфигурация из проекта ---
-# Используем переменные из config.py для консистентности
+# --- Project configuration ---
+# Use variables from config.py for consistency
 try:
     from config import CHROMA_DB_PATH, CHROMA_CONCEPTS_COLLECTION_NAME
 except ImportError:
-    print("Не удалось импортировать config.py. Используются значения по умолчанию.")
+    print("Could not import config.py. Using default values.")
     CHROMA_DB_PATH = "db"
     CHROMA_CONCEPTS_COLLECTION_NAME = "concepts"
 
 
 def inspect_concepts_hygiene():
     """
-    Анализирует "Концептуальное Ядро" (коллекцию концептов)
-    на предмет семантических дубликатов.
+    Analyze "Conceptual Core" (concepts collection)
+    for semantic duplicates.
     """
-    print("--- Инспектор Гигиены Концептуального Ядра ---")
+    print("--- Conceptual Core Hygiene Inspector ---")
 
     try:
         client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
         collection = client.get_collection(name=CHROMA_CONCEPTS_COLLECTION_NAME)
 
-        # Получаем все данные один раз, чтобы не дергать базу постоянно
+        # Get all data once to avoid constant database calls
         all_data = collection.get(include=["metadatas", "documents"])
 
         if not all_data or not all_data['ids']:
-            print("Коллекция концептов пуста.")
+            print("Concepts collection is empty.")
             return
 
-        print(f"Всего концептов в базе: {len(all_data['ids'])}")
+        print(f"Total concepts in database: {len(all_data['ids'])}")
 
-        # --- Основной анализ: Семантические дубликаты концептов ---
+        # --- Main analysis: Semantic duplicates of concepts ---
         find_semantic_duplicates(collection, all_data)
 
     except Exception as e:
-        print(f"Произошла критическая ошибка: {e}", exc_info=True)
+        print(f"Critical error occurred: {e}", exc_info=True)
 
 
 def find_semantic_duplicates(collection: chromadb.Collection, all_data: dict):
-    """Находит и выводит группы семантически близких концептов."""
-    print("\n--- Поиск семантических дубликатов ---")
-    print(f"Порог расстояния (distance): < {SEMANTIC_DUPLICATE_THRESHOLD_DISTANCE}\n")
+    """Find and display groups of semantically similar concepts."""
+    print("\n--- Searching for semantic duplicates ---")
+    print(f"Distance threshold: < {SEMANTIC_DUPLICATE_THRESHOLD_DISTANCE}\n")
 
-    # Создаем map для быстрого доступа к метаданным по ID
+    # Create map for quick metadata access by ID
     metadata_map = {all_data['ids'][i]: all_data['metadatas'][i] for i in range(len(all_data['ids']))}
     document_map = {all_data['ids'][i]: all_data['documents'][i] for i in range(len(all_data['ids']))}
 
     processed_ids = set()
     duplicate_groups_found = 0
 
-    for record_id in tqdm(all_data['ids'], desc="Анализ концептов"):
+    for record_id in tqdm(all_data['ids'], desc="Analyzing concepts"):
         if record_id in processed_ids:
             continue
 
         query_doc = document_map[record_id]
 
-        # Ищем 5 ближайших соседей. Для концептов этого обычно достаточно.
+        # Search for 5 nearest neighbors. Usually enough for concepts.
         results = collection.query(
             query_texts=[query_doc],
             n_results=5,
@@ -78,16 +81,16 @@ def find_semantic_duplicates(collection: chromadb.Collection, all_data: dict):
 
         current_group = []
 
-        # Собираем всех кандидатов, которые проходят по порогу
+        # Collect all candidates that pass the threshold
         for j in range(len(results['ids'][0])):
             dist = results['distances'][0][j]
             res_id = results['ids'][0][j]
 
             if dist < SEMANTIC_DUPLICATE_THRESHOLD_DISTANCE:
-                # Получаем метаданные и количество родителей
+                # Get metadata and parent count
                 meta = results['metadatas'][0][j]
                 try:
-                    # parent_ids хранится как JSON-строка
+                    # parent_ids is stored as JSON string
                     num_parents = len(json.loads(meta.get('parent_ids', '[]')))
                 except (json.JSONDecodeError, TypeError):
                     num_parents = 0
@@ -99,22 +102,22 @@ def find_semantic_duplicates(collection: chromadb.Collection, all_data: dict):
                     'document': collection.get(ids=[res_id])['documents'][0]
                 })
 
-        # Если в группе больше одного элемента, значит мы нашли дубликаты
+        # If group has more than one element, we found duplicates
         if len(current_group) > 1:
             duplicate_groups_found += 1
-            print(f"\n\n--- Найдена Группа Дубликатов #{duplicate_groups_found} ---")
+            print(f"\n\n--- Found Duplicate Group #{duplicate_groups_found} ---")
             df_group = pd.DataFrame(current_group)
-            # Сортируем внутри группы по расстоянию, чтобы было нагляднее
+            # Sort within group by distance for clarity
             print(df_group.sort_values(by='distance').to_string(index=False))
 
-            # Добавляем все ID из найденной группы в обработанные, чтобы не проверять их заново
+            # Add all IDs from found group to processed to avoid re-checking
             for rec in current_group:
                 processed_ids.add(rec['id'])
 
     if duplicate_groups_found == 0:
-        print("\nГрупп семантических дубликатов, удовлетворяющих порогу, не найдено.")
+        print("\nNo semantic duplicate groups matching threshold found.")
 
 
 if __name__ == "__main__":
-    # Убедитесь, что у вас установлены зависимости: pip install pandas tqdm chromadb
+    # Make sure you have dependencies installed: pip install pandas tqdm chromadb
     inspect_concepts_hygiene()
