@@ -1,58 +1,61 @@
-# memory_cleaner.py
+"""Memory cleaner script.
+
+Cleans and optimizes LTM by removing short/unused messages and merging duplicates.
+"""
 
 import chromadb
 import pandas as pd
 from tqdm import tqdm
 import time
 
-# --- Настройки ---
+# --- Settings ---
 SHORT_MESSAGE_THRESHOLD_CHARS = 15
-# Удаляем короткие сообщения с access_count <= этого значения
+# Delete short messages with access_count <= this value
 SHORT_MESSAGE_MAX_AC = 1
 
 SEMANTIC_DUPLICATE_THRESHOLD_DISTANCE = 0.2
-# --- Конфигурация базы ---
+# --- Database configuration ---
 CHROMA_DB_PATH = "db"
 CHROMA_COLLECTION_NAME = "stream"
 
 
 def confirm_action(prompt: str) -> bool:
-    """Запрашивает у пользователя подтверждение действия."""
+    """Request user confirmation for an action."""
     while True:
         response = input(f"{prompt} (y/n): ").lower().strip()
         if response in ['y', 'yes']:
             return True
         if response in ['n', 'no']:
             return False
-        print("Пожалуйста, введите 'y' или 'n'.")
+        print("Please enter 'y' or 'n'.")
 
 
 def run_memory_hygiene():
-    """Основная функция для очистки и оптимизации LTM."""
-    print("--- Запуск процедуры Гигиены Памяти ---")
+    """Main function for LTM cleanup and optimization."""
+    print("--- Starting Memory Hygiene Procedure ---")
 
     try:
         client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
         collection = client.get_collection(name=CHROMA_COLLECTION_NAME)
 
-        # --- Этап 1: Санитарная чистка ---
+        # --- Stage 1: Sanitary cleanup ---
         clean_short_messages(collection)
 
-        # --- Этап 2: Интеллектуальное слияние ---
+        # --- Stage 2: Intelligent merging ---
         merge_semantic_duplicates(collection)
 
-        print("\n--- Процедура Гигиены Памяти завершена. ---")
+        print("\n--- Memory Hygiene Procedure completed. ---")
 
     except Exception as e:
-        print(f"\nПроизошла критическая ошибка: {e}")
+        print(f"\nCritical error occurred: {e}")
 
 
 def clean_short_messages(collection: chromadb.Collection):
-    """Находит и предлагает удалить короткие и 'холодные' сообщения."""
-    print("\n--- Этап 1: Поиск коротких и неиспользуемых сообщений ---")
+    """Find and offer to delete short and 'cold' messages."""
+    print("\n--- Stage 1: Searching for short and unused messages ---")
 
     try:
-        # Получаем все данные. Для больших баз может быть медленно, но надежно.
+        # Get all data. May be slow for large databases, but reliable.
         all_data = collection.get(include=["metadatas", "documents"])
 
         ids_to_delete = []
@@ -71,35 +74,35 @@ def clean_short_messages(collection: chromadb.Collection):
                 })
 
         if not ids_to_delete:
-            print("Не найдено коротких/неиспользуемых сообщений для удаления.")
+            print("No short/unused messages found for deletion.")
             return
 
-        print(f"Найдено {len(ids_to_delete)} записей-кандидатов на удаление:")
+        print(f"Found {len(ids_to_delete)} candidate records for deletion:")
         df = pd.DataFrame(short_records_for_display)
         print(df.to_string())
 
-        if confirm_action("\nУдалить эти записи?"):
+        if confirm_action("\nDelete these records?"):
             collection.delete(ids=ids_to_delete)
-            print(f"Успешно удалено {len(ids_to_delete)} записей.")
+            print(f"Successfully deleted {len(ids_to_delete)} records.")
         else:
-            print("Удаление отменено.")
+            print("Deletion cancelled.")
 
     except Exception as e:
-        print(f"Ошибка на этапе санитарной чистки: {e}")
+        print(f"Error during sanitary cleanup: {e}")
 
 
 def merge_semantic_duplicates(collection: chromadb.Collection):
-    """Находит, предлагает и выполняет слияние семантических дубликатов."""
-    print("\n--- Этап 2: Поиск и слияние семантических дубликатов ---")
+    """Find, offer and perform merging of semantic duplicates."""
+    print("\n--- Stage 2: Searching and merging semantic duplicates ---")
 
     all_data = collection.get(include=["metadatas", "documents"])
     if not all_data or not all_data['ids']:
-        print("База данных пуста, слияние невозможно.")
+        print("Database is empty, merging not possible.")
         return
 
     processed_ids = set()
 
-    for i in tqdm(range(len(all_data['ids'])), desc="Анализ дубликатов"):
+    for i in tqdm(range(len(all_data['ids'])), desc="Analyzing duplicates"):
         record_id = all_data['ids'][i]
         if record_id in processed_ids:
             continue
@@ -108,7 +111,7 @@ def merge_semantic_duplicates(collection: chromadb.Collection):
 
         results = collection.query(
             query_texts=[query_doc],
-            n_results=10,  # Ищем больше соседей для надежности
+            n_results=10,  # Search for more neighbors for reliability
             include=["documents", "metadatas", "distances"]
         )
 
@@ -128,7 +131,7 @@ def merge_semantic_duplicates(collection: chromadb.Collection):
             continue
 
         print("\n\n-----------------------------------------------------")
-        print(f"Найдена группа из {len(group_candidates)} семантических дубликатов:")
+        print(f"Found group of {len(group_candidates)} semantic duplicates:")
         df_group = pd.DataFrame([{
             'id': rec['id'],
             'role': rec['metadata'].get('role'),
@@ -138,49 +141,49 @@ def merge_semantic_duplicates(collection: chromadb.Collection):
         } for rec in group_candidates])
         print(df_group.to_string())
 
-        # Определяем стратегию
+        # Determine strategy
         internal_count = sum(1 for rec in group_candidates if rec['metadata'].get('role') == 'internal')
         is_thought_group = internal_count / len(group_candidates) > 0.5
 
         leader = None
         if is_thought_group:
-            print("\nСтратегия: 'Новизна' (оставляем самую свежую мысль).")
+            print("\nStrategy: 'Novelty' (keep the freshest thought).")
             leader = max(group_candidates, key=lambda x: x['metadata'].get('timestamp', 0))
         else:
-            print("\nСтратегия: 'Популярность' (оставляем запись с макс. access_count).")
+            print("\nStrategy: 'Popularity' (keep record with max access_count).")
             leader = max(group_candidates, key=lambda x: x['metadata'].get('access_count', 0))
 
         ids_to_delete = [rec['id'] for rec in group_candidates if rec['id'] != leader['id']]
         total_ac = sum(rec['metadata'].get('access_count', 0) for rec in group_candidates)
 
-        print("\nПлан операции:")
-        print(f"  - Оставить ID: {leader['id']}")
-        print(f"  - Текст: '{leader['document'][:80]}...'")
-        print(f"  - Присвоить новый access_count: {total_ac}")
-        print(f"  - Удалить IDs: {ids_to_delete}")
+        print("\nOperation plan:")
+        print(f"  - Keep ID: {leader['id']}")
+        print(f"  - Text: '{leader['document'][:80]}...'")
+        print(f"  - Assign new access_count: {total_ac}")
+        print(f"  - Delete IDs: {ids_to_delete}")
 
-        if confirm_action("Применить это слияние?"):
+        if confirm_action("Apply this merge?"):
             try:
-                # Обновляем лидера
+                # Update leader
                 leader_meta = leader['metadata']
                 leader_meta['access_count'] = total_ac
                 collection.update(ids=[leader['id']], metadatas=[leader_meta])
 
-                # Удаляем остальных
+                # Delete the rest
                 if ids_to_delete:
                     collection.delete(ids=ids_to_delete)
 
-                print("Слияние успешно выполнено.")
+                print("Merge successfully completed.")
             except Exception as e:
-                print(f"Ошибка при выполнении слияния: {e}")
+                print(f"Error during merge: {e}")
         else:
-            print("Слияние для этой группы отменено.")
+            print("Merge cancelled for this group.")
 
-        # Добавляем все ID из группы в обработанные, чтобы не анализировать их снова
+        # Add all IDs from group to processed to avoid re-analyzing
         for rec in group_candidates:
             processed_ids.add(rec['id'])
 
 
 if __name__ == "__main__":
-    # Установка зависимостей: pip install pandas tqdm
+    # Install dependencies: pip install pandas tqdm
     run_memory_hygiene()
