@@ -84,3 +84,9 @@ dmypy.json
 
 # Local development
 local_settings.py
+
+# Internal notes
+TODO.md
+
+# Workflow files
+.agent/
