@@ -90,3 +90,7 @@ TODO.md
 
 # Workflow files
 .agent/
+
+# Visualizations (artifacts)
+graph_banner_visualization.html
+interactive_graph_visualization.html
