@@ -1,226 +1,139 @@
-# Digital Genesis: Telegram Bot с векторной памятью и системой рефлексии
+# Digital Genesis
 
-Telegram-бот на базе Google Gemini AI с реализацией долгосрочной памяти, семантического поиска и автоматических циклов рефлексии.
+**Digital Genesis** is an advanced AI bot driven by Long-Term Memory (LTM), associative graph reasoning, and background self-reflection capabilities. It moves beyond stateless interactions by maintaining a persistent "stream of consciousness" and a conceptual graph, allowing it to remember facts, form associations, and evolve its understanding over time.
 
-## Описание проекта
+## Table of Contents
 
-Система реализует Telegram-бот со следующим функционалом:
-- Векторная долгосрочная память (ChromaDB) с семантической индексацией
-- Извлечение когнитивных активов: разложение текста на атомарные единицы знания
-- Автоматические циклы рефлексии с анализом кластеров памяти для генерации новых инсайтов
-- Построение графа знаний с взвешиванием узлов по PageRank
-- Контекстно-зависимая генерация ответов на основе извлечённой памяти
+- [Background](#background)
+- [Key Features](#key-features)
+- [Project Structure](#project-structure)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Visualizations](#visualizations)
+- [License](#license)
 
-## Архитектура
+## Background
 
-### Основные компоненты
+Traditional chatbots often suffer from amnesia or limited context windows. Digital Genesis addresses this by implementing a dual-memory architecture:
+1.  **Vector Memory (LTM):** Uses **ChromaDB** to store and retrieve "memories" (facts, thoughts, dialogues) based on semantic similarity.
+2.  **Graph Memory (NetworkX):** Maintains a knowledge graph of concepts and their relationships, enabling associative reasoning and role tracking.
 
-```
+Powered by **Google Gemini** (via `google-generativeai`), the bot acts not just as a responder but as an autonomous entity that "thinks," "reflects," and "dreams" (via background reflection cycles).
+
+## Key Features
+
+-   **Deep LTM**: Persistent storage of every interaction, thought, and fact.
+-   **Associative Reasoning**: Graph-based connections allow the bot to link related concepts even if they weren't mentioned in the current context.
+-   **Self-Reflection**: A background process (`Force Reflection`) that analyzes past memories to form new, higher-level concepts and eliminate conversational noise.
+-   **Telegram Interface**: A robust, async bot interface built with `aiogram 3.x`.
+-   **Interactive Visualizations**: Generate HTML-based interactive graphs of the bot's memory space.
+
+## Project Structure
+
+```text
 digital_genesis/
-├── main.py                 # Telegram-бот с обработчиками сообщений и планировщиком рефлексии
-├── config.py              # Конфигурация, API ключи, системные промпты
-├── ltm.py                 # Абстракция долгосрочной памяти поверх ChromaDB
-├── graph_manager.py       # Построение графа и анализ
-├── scripts/               # Утилиты для инспекции и обслуживания
-│   ├── db_inspector.py
-│   ├── concepts_analyze.py
-│   ├── memory_cleaner.py
-│   └── ...
-├── db/                    # Хранилище ChromaDB
-├── logs/                  # Логирование (pickle формат)
-└── export/                # CSV экспорты коллекций
+├── core/
+│   ├── graph/           # Knowledge Graph logic (NetworkX)
+│   ├── ltm/             # Long-Term Memory (LTM) & ChromaDB manager
+│   └── reflection/      # Background reflection engine
+├── handlers/            # Telegram bot command and message handlers
+├── scripts/             # Utility toolset
+│   ├── analyze_graph.py           # Analyzes graph structure and connectivity
+│   ├── concepts_analyze.py        # Hygiene inspector for Conceptual Core
+│   ├── db_inspector.py            # Low-level ChromaDB inspection tool
+│   ├── force_reflection.py        # Manually triggers reflection cycles
+│   ├── graph_fallback_server.py   # API server reading directly from graph file
+│   ├── memory_api_server.py       # API server for debugging specific memories
+│   ├── memory_cleaner.py          # Tool to prune short/duplicate memories
+│   ├── memory_hygiene_inspector.py# Analyzes LTM for quality and duplicates
+│   └── vizualize_graph_*.py       # Various graph visualization generators
+├── services/            # External integrations (Gemini, Logging)
+├── utils/               # Helpers (Formatters, Keyboards)
+├── .env.example         # Template for environment variables
+├── config.py            # Central configuration
+├── main.py              # Application entry point
+└── requirements.txt     # Python dependencies
 ```
 
-### Ключевые модули
+## Installation
 
-| Модуль | Назначение |
-|--------|-----------|
-| `main.py` | Обработчики сообщений, управление циклом рефлексии, обработка ошибок |
-| `config.py` | API credentials, параметры LLM, шаблоны промптов |
-| `ltm.py` | Управление коллекциями ChromaDB, семантический поиск, персистентность памяти |
-| `graph_manager.py` | Построение графа, вычисление PageRank, механизмы затухания |
-
-## Технологический стек
-
-- **aiogram 3.x**: асинхронный wrapper для Telegram Bot API
-- **google-generativeai**: интеграция с Gemini API
-- **chromadb**: векторная БД для семантического поиска
-- **apscheduler**: планировщик фоновых задач
-- **networkx**: алгоритмы работы с графами
-- **python-dotenv**: управление переменными окружения
-
-## Установка и запуск
-
-### Требования
-
+### Prerequisites
 - Python 3.10+
-- Telegram Bot API токен
-- Google Gemini API credentials
+- A Google Cloud Project with Gemini API access ([Google AI Studio](https://aistudio.google.com/))
+- A Telegram Bot Token ([BotFather](https://t.me/BotFather))
 
-### Шаги установки
+### Steps
 
-1. Клонирование репозитория:
-```bash
-git clone https://github.com/yourusername/digital_genesis.git
-cd digital_genesis
-```
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/digital_genesis.git
+    cd digital_genesis
+    ```
 
-2. Создание виртуального окружения:
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate     # Windows
-```
+2.  **Create and activate a virtual environment:**
+    ```bash
+    python -m venv venv
+    # Windows:
+    .\venv\Scripts\activate
+    # Linux/Mac:
+    source venv/bin/activate
+    ```
 
-3. Установка зависимостей:
-```bash
-pip install -r requirements.txt
-```
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-4. Конфигурация переменных окружения в `.env`:
-```
-TELEGRAM_BOT_TOKEN=your_bot_token
-GEMINI_API_KEY=your_api_key
-GEMINI_CONCEPTS_API_KEY_2=your_concepts_key
-```
+## Configuration
 
-5. Запуск бота:
+1.  **Environment Variables:**
+    Copy `.env.example` to `.env` and fill in your credentials:
+    ```bash
+    cp .env.example .env
+    ```
+
+    | Variable | Description |
+    | :--- | :--- |
+    | `GEMINI_API_KEY` | Your Google Gemini API Key |
+    | `TELEGRAM_BOT_TOKEN` | Your Telegram Bot Token |
+    | `ADMIN_ID` | Telegram User ID of the bot admin |
+
+2.  **App Config:**
+    Adjust internal settings in `config.py` if necessary (e.g., model names, memory thresholds).
+
+## Usage
+
+Start the bot:
 ```bash
 python main.py
 ```
 
-## Конфигурация системы
+The bot will initialize:
+1.  Connect to ChromaDB (LTM).
+2.  Load the Knowledge Graph.
+3.  Start the Telegram polling loop.
 
-Критичные параметры в `config.py`:
-
-### Конфигурация LLM
-```python
-GEMINI_MODEL_NAME = 'gemini-2.5-flash'          # Основная модель
-GEMINI_CONCEPTS_MODEL_NAME = 'gemini-2.0-flash' # Модель анализа
-```
-
-### Параметры памяти
-```python
-DIALOGUE_SEARCH_RESULT_COUNT = 5      # Окно контекста диалогов
-THOUGHT_SEARCH_RESULT_COUNT = 2       # Окно контекста внутренних мыслей
-CHROMA_DB_PATH = "db"                 # Путь к БД
-```
-
-### Система рефлексии
-```python
-REFLECTION_INTERVAL_SECONDS = 300     # Частота цикла (5 минут)
-REFLECTION_MIN_ACCESS_COUNT = 2       # Порог активации
-REFLECTION_CLUSTER_SIZE = 5           # Размер семантического кластера
-```
-
-### Граф знаний
-```python
-GRAPH_DECAY_FACTOR = 0.995            # Затухание веса рёбер за цикл
-GRAPH_DECAY_THRESHOLD = 0.01          # Минимальный порог веса
-GRAPH_SAVE_INTERVAL_SECONDS = 600     # Интервал сохранения
-```
-
-## Система памяти
-
-### ChromaDB коллекции
-
-1. **stream** - история диалогов (сообщения пользователя/бота)
-2. **cognitive_assets** - извлечённые единицы знаний из текста
-3. **facts** - фактическая информация
-4. **modalities** - метаданные о типе информации
-
-### Структура записей памяти
-
-Каждая запись содержит:
-- `id`: UUID идентификатор
-- `doc`: текстовое содержание
-- `role`: источник (user/FOFE/internal)
-- `access_count`: счётчик обращений к записи
-- `timestamp`: временная метка создания/обновления
-
-## Извлечение когнитивных активов
-
-Текст разлагается на структурированные когнитивные активы:
-
-```json
-{
-  "кто": "я",                        // Агент (я или пользователь)
-  "что_делает": "считает",           // Глагол ментального действия
-  "суть": "основное утверждение",    // Ядро высказывания
-  "тональность": ["уверенная"],      // Эмоциональные маркеры
-  "importance": 8,                   // Оценка релевантности (1-10)
-  "confidence": 9                    // Уверенность извлечения (1-10)
-}
-```
-
-## Цикл рефлексии
-
-Автоматический процесс, выполняющийся с интервалом `REFLECTION_INTERVAL_SECONDS`:
-
-1. **Выбор зерна**: случайная высокочастотная запись (access_count > REFLECTION_MIN_ACCESS_COUNT)
-2. **Кластеризация**: семантический поиск соседей (k=REFLECTION_CLUSTER_SIZE)
-3. **Анализ**: отправка кластера в Gemini для синтеза
-4. **Генерация**: новый инсайт сохраняется как внутренняя мысль
-5. **Персистентность**: запись в коллекцию stream
-6. **Затухание**: снижение access_count записей кластера
-
-## Утилиты
-
-Скрипты в директории `scripts/` для обслуживания и анализа системы:
-
+### Scripts usage
+Run utilities from the root directory:
 ```bash
-# db_inspector.py - Перестроение графа из данных ChromaDB
-python scripts/db_inspector.py
+# Generate a visual map of the brain
+python -m scripts.vizualize_graph
 
-# concepts_analyze.py - Анализ коллекции когнитивных активов на предмет семантических дубликатов
-python scripts/concepts_analyze.py
+# Analyze memory health
+python -m scripts.memory_hygiene_inspector
 
-# force_reflection.py - Ручной запуск цикла рефлексии с параметрами
-python scripts/force_reflection.py
-
-# vizualize_graph.py - Визуализация графа знаний через интерактивное web-представление
-python scripts/vizualize_graph.py
-
-# memory_cleaner.py - Очистка памяти: удаление дубликатов и коротких сообщений
-python scripts/memory_cleaner.py
-
-# analyze_graph.py - Анализ структуры графа, вывод статистики и центральных узлов
-python scripts/analyze_graph.py
-
-# memory_hygiene_inspector.py - Проверка целостности и качества данных в памяти
-python scripts/memory_hygiene_inspector.py
-
-# memory_api_server.py - REST API сервер для доступа к памяти (legacy)
-python scripts/memory_api_server.py
-
-# graph_fallback_server.py - Резервный сервер для работы с графом (legacy)
-python scripts/graph_fallback_server.py
-
-# great_migration.py - Утилита для миграции данных между версиями (legacy)
-python scripts/great_migration.py
+# Force a reflection cycle on a specific memory ID
+python -m scripts.force_reflection
 ```
 
-**Примечание**: скрипты в директории `scripts/` — это legacy код. Они могут требовать установки дополнительных зависимостей, не указанных в `requirements.txt`, или адаптации под текущую версию кода.
+## Visualizations
 
-## Логирование
+The project generates interactive HTML files to visualize the bot's internal state:
+-   `interactive_graph_visualization.html`: Full interactive graph (PyVis).
+-   `graph_banner_visualization.html`: A simplified, banner-like view.
+-   `public_graph_visualization.html`: Sanitized view for public demonstration.
 
-Три потока логирования:
+## License
 
-- **ThoughtProcess**: общие логи приложения (stdout)
-- **Reflections**: логи генерации инсайтов (logs/reflections.log)
-- **Concepts**: логи извлечения активов (stdout)
-
-## Важные замечания
-
-1. **Credentials**: файл `.env` должен содержать валидные API ключи; никогда не коммитить в версионный контроль
-2. **База данных**: директория ChromaDB создаётся автоматически при первом запуске
-3. **Хранилище**: персистентные данные в директориях `db/`, `logs/`, и `export/`
-4. **Расходы API**: мониторить использование Gemini API; настроить лимиты если необходимо
-5. **Рост памяти**: затухание access_count может потребовать периодического обслуживания
-
-## Аспекты безопасности
-
-- API ключи управляются исключительно через переменные окружения
-- `.env` исключён через `.gitignore`
-- Фильтры безопасности Gemini конфигурируются через `SAFETY_SETTINGS`
-- Отсутствует валидация входных данных для защиты от malicious prompts (использовать только с доверенными пользователями)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
