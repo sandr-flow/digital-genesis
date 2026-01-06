@@ -1,7 +1,7 @@
-"""Interactive graph visualization script with FastAPI backend.
+"""Public graph visualization script without node content access.
 
-Provides real-time graph visualization with filtering, physics controls,
-and an embedded API server for fetching node data.
+Standalone version that works without a server - all metadata is embedded in HTML.
+Node content is hidden for privacy.
 """
 
 import pickle
@@ -9,16 +9,11 @@ import networkx as nx
 from pyvis.network import Network
 import logging
 import os
-import threading
-import time
 import json
 import sys
 import webbrowser
 import math
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-import uvicorn
+from datetime import datetime
 
 # Add project root to path for config import
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,148 +30,47 @@ except ImportError:
     GRAPH_FILE_PATH = "logs/mind_graph.gpickle"
     AI_ROLE_NAME = "assistant"
 
-# Attempt LTM import for node content
-api_ltm = None
-try:
-    from core.ltm import ltm
-    api_ltm = ltm
-    logging.info("LTM successfully imported for API")
-except Exception as e:
-    logging.warning(f"LTM unavailable: {e}. Only graph attributes will be shown.")
 
-
-# --- Embedded FastAPI Server ---
-app = FastAPI(title="Graph Memory API", description="Embedded API for graph node data")
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Global graph variable shared between visualizer and API
-api_graph = None
-
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "ok",
-        "graph_available": api_graph is not None,
-        "nodes": api_graph.number_of_nodes() if api_graph else 0,
-        "edges": api_graph.number_of_edges() if api_graph else 0
-    }
-
-
-@app.get("/memory/{node_id}")
-async def get_memory(node_id: str):
-    if api_graph is None:
-        raise HTTPException(status_code=503, detail="Graph unavailable")
-
-    try:
-        if node_id not in api_graph.nodes():
-            raise HTTPException(status_code=404, detail=f"Node {node_id} not found in graph")
-
-        attrs = api_graph.nodes[node_id]
+def prepare_node_metadata(graph):
+    """Prepare node metadata for embedding in HTML."""
+    node_metadata = {}
+    
+    for node_id, attrs in graph.nodes(data=True):
         role = attrs.get('role', 'unknown')
-        neighbors = list(api_graph.neighbors(node_id))
-
+        # Replace FOFE with assistant for display
+        display_role = 'assistant' if role == 'FOFE' else role
+        neighbors = list(graph.neighbors(node_id))
+        
+        # Collect edge information
         edges_info = []
         for neighbor in neighbors:
-            edge_data = api_graph.get_edge_data(node_id, neighbor, {})
+            edge_data = graph.get_edge_data(node_id, neighbor, {})
             edges_info.append({
                 "to": neighbor,
                 "type": edge_data.get('type', 'unknown'),
                 "weight": edge_data.get('cumulative_weight', 1.0)
             })
-
-        # Try to get content from graph attributes
-        content = attrs.get('content', attrs.get('text', attrs.get('document', None)))
         
-        # If content not in graph, try to get from LTM
-        if content is None and api_ltm is not None:
+        # Format safe attributes
+        safe_metadata = {}
+        if 'role' in attrs:
+            # Show assistant instead of FOFE
+            safe_metadata['role'] = 'assistant' if attrs['role'] == 'FOFE' else attrs['role']
+        if 'timestamp' in attrs:
             try:
-                ltm_result = api_ltm.stream_collection.get(
-                    ids=[node_id],
-                    include=["documents", "metadatas"]
-                )
-                if ltm_result["ids"] and len(ltm_result["ids"]) > 0:
-                    content = ltm_result["documents"][0] if ltm_result["documents"] else None
-                    # Update metadata from LTM if available
-                    if ltm_result["metadatas"] and ltm_result["metadatas"][0]:
-                        ltm_meta = ltm_result["metadatas"][0]
-                        # Add access_count from LTM
-                        if "access_count" in ltm_meta:
-                            attrs["access_count"] = ltm_meta["access_count"]
-            except Exception as e:
-                logging.warning(f"Could not get LTM data for node {node_id}: {e}")
+                dt = datetime.fromtimestamp(attrs['timestamp'])
+                safe_metadata['timestamp'] = dt.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                safe_metadata['timestamp'] = str(attrs['timestamp'])
         
-        # Final check
-        if content is None:
-            content = "<em>Content not found in graph or LTM</em>"
-
-        def format_attributes(attrs):
-            if not attrs:
-                return "No attributes"
-            formatted = []
-            for key, value in attrs.items():
-                if isinstance(value, str) and len(value) > 100:
-                    value = value[:100] + "..."
-                formatted.append(f"<strong>{key}:</strong> {value}")
-            return "<br>".join(formatted)
-
-        html_content = f"""
-        <div style="font-family: Arial, sans-serif;">
-            <h3 style="color: #333; margin-top: 0;">Node: {node_id}</h3>
-            <p><strong>Role:</strong> <span style="color: {'#5CB85C' if role == 'user' else '#D9534F' if role == AI_ROLE_NAME else '#5BC0DE'};">{role.capitalize()}</span></p>
-            <p><strong>Neighbors:</strong> {len(neighbors)}</p>
-
-            <hr style="margin: 15px 0;">
-
-            <h4>Content:</h4>
-            <div style="background: #f5f5f5; padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto; border-left: 4px solid #ddd;">
-                {content}
-            </div>
-
-            <hr style="margin: 15px 0;">
-
-            <h4>All attributes:</h4>
-            <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
-                {format_attributes(attrs)}
-            </div>
-
-            {f'''
-            <hr style="margin: 15px 0;">
-            <h4>Connections ({len(edges_info)}):</h4>
-            <div style="max-height: 150px; overflow-y: auto;">
-                {''.join([f"<div style='margin: 5px 0; padding: 5px; background: #f0f0f0; border-radius: 3px;'><strong>{edge['to']}</strong> ({edge['type']}) - weight: {edge['weight']:.2f}</div>" for edge in edges_info[:10]])}
-                {f"<div style='color: #666; font-style: italic;'>... and {len(edges_info) - 10} more</div>" if len(edges_info) > 10 else ""}
-            </div>
-            ''' if edges_info else ''}
-        </div>
-        """
-
-        return HTMLResponse(content=html_content)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error getting node data {node_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
-def start_api_server():
-    """Start FastAPI server in a separate thread."""
-    def run_server():
-        uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+        node_metadata[node_id] = {
+            "role": display_role,
+            "neighbors_count": len(neighbors),
+            "edges": edges_info,
+            "metadata": safe_metadata
+        }
     
-    thread = threading.Thread(target=run_server, daemon=True)
-    thread.start()
-    logging.info("Embedded API server started at http://127.0.0.1:8000")
-    time.sleep(1)  # Give server time to start
+    return node_metadata
 
 
 def load_graph():
@@ -195,12 +89,8 @@ def load_graph():
         return None
 
 
-
 def prepare_data_for_js(graph):
-    """
-    Convert graph data to JavaScript-friendly format.
-    Allows all filtering to be done client-side without reload.
-    """
+    """Prepare graph data for JavaScript."""
     nodes_data = []
     edges_data = []
 
@@ -208,12 +98,11 @@ def prepare_data_for_js(graph):
         'internal': '#5BC0DE',
         'user': '#5CB85C',
         AI_ROLE_NAME: '#D9534F',
-        'FOFE': '#D9534F'  # Merged with assistant
+        'FOFE': '#D9534F',  # FOFE also displayed as Assistant
     }
 
     for node_id, attrs in graph.nodes(data=True):
         role = attrs.get('role')
-        # Exclude nodes without role
         if role is None:
             continue
             
@@ -222,11 +111,10 @@ def prepare_data_for_js(graph):
             "label": ' ',
             "color": color_map.get(role, '#808080'),
             "size": 10,
-            "title": f"<b>ID:</b> {node_id}<br><b>Role:</b> {role}",
-            "role": role  # Clean field for filtering
+            "title": f"ID: {node_id}\nRole: {role}",
+            "role": role
         })
 
-    # Create Set of node IDs for fast edge validation
     valid_node_ids = {n['id'] for n in nodes_data}
 
     min_weight, max_weight = (1.0, 1.0)
@@ -236,7 +124,6 @@ def prepare_data_for_js(graph):
         max_weight = max(weights) if weights else 1.0
 
     for u, v, attrs in graph.edges(data=True):
-        # Filter edges: both nodes must be in filtered list
         if u not in valid_node_ids or v not in valid_node_ids:
             continue
             
@@ -250,17 +137,15 @@ def prepare_data_for_js(graph):
             "color": 'rgba(0,0,0,0.3)' if edge_type == 'structural' else 'rgba(100,100,100,0.3)',
             "width": width,
             "dashes": edge_type == 'associative',
-            "title": f"<b>Type:</b> {edge_type}<br><b>Weight:</b> {weight:.2f}",
-            "type": edge_type,  # Clean field for filtering
-            "weight": weight  # Clean field for filtering
+            "title": f"Type: {edge_type}\nWeight: {weight:.2f}",
+            "type": edge_type,
+            "weight": weight
         })
 
-    # Round weights for slider
     min_weight_rounded = math.floor(min_weight * 10) / 10
     max_weight_rounded = math.ceil(max_weight * 10) / 10
 
     return nodes_data, edges_data, min_weight_rounded, max_weight_rounded
-
 
 
 def create_pyvis_network(nodes_data, edges_data):
@@ -275,14 +160,9 @@ def create_pyvis_network(nodes_data, edges_data):
     )
 
     if not nodes_data:
-        # If no nodes, do nothing
         return net
 
-    # Extract list of node IDs for first argument
     node_ids = [d['id'] for d in nodes_data]
-
-    # Create properties dict for named arguments,
-    # EXCLUDING 'id' and our custom 'role' attribute
     node_properties = {
         k: [d[k] for d in nodes_data]
         for k in nodes_data[0]
@@ -319,14 +199,15 @@ def configure_physics(net):
     net.set_options(json.dumps(physics_config))
 
 
-def add_custom_js(html_content, all_nodes_json, all_edges_json, min_weight, max_weight):
-    """Add custom JavaScript for filtering and controls."""
+def add_custom_js(html_content, all_nodes_json, all_edges_json, node_metadata_json, min_weight, max_weight):
+    """Add custom JS with filtering and controls (standalone version without server)."""
     custom_js = f"""<style>
-#loading-overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;}}
+#loading-overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:#ffffff;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;}}
 #loading-overlay .spinner{{border:8px solid #f3f3f3;border-top:8px solid #007bff;border-radius:50%;width:60px;height:60px;animation:spin 1s linear infinite;margin-bottom:20px;}}
 @keyframes spin{{0%{{transform:rotate(0deg);}}100%{{transform:rotate(360deg);}}}}
 #loading-overlay h2{{color:#333;margin:10px 0;}}
 #loading-overlay p{{color:#666;font-size:14px;}}
+#loading-progress{{font-size:24px;font-weight:bold;color:#007bff;margin-bottom:10px;}}
 #memory-panel{{position:fixed;top:10px;right:10px;width:35%;height:90vh;overflow:auto;border:2px solid #ddd;border-radius:8px;padding:15px;background:#fff;font-family:'Segoe UI',Arial,sans-serif;font-size:14px;z-index:1000;box-shadow:0 4px 6px rgba(0,0,0,.1);display:none;opacity:0;transition:opacity 0.3s ease-in;}}
 #memory-panel.visible{{display:block;opacity:1;}}
 #memory-panel h3{{margin-top:0;color:#333;border-bottom:2px solid #eee;padding-bottom:10px;}}
@@ -343,11 +224,12 @@ def add_custom_js(html_content, all_nodes_json, all_edges_json, min_weight, max_
 #weight-slider-container label{{display:block;margin-bottom:5px;}}
 </style>
 <div id="loading-overlay">
+    <div id="loading-progress">0%</div>
     <div class="spinner"></div>
     <h2>Loading graph...</h2>
     <p>Please wait</p>
 </div>
-<div id="memory-panel"><div class="loading">Click on a node to view data</div></div>
+<div id="memory-panel"><div class="loading">Click on a node to view metadata</div></div>
 <div id="controls-container">
     <div id="filter-controls" class="control-panel">
         <h4>Filtering</h4>
@@ -363,8 +245,8 @@ def add_custom_js(html_content, all_nodes_json, all_edges_json, min_weight, max_
             <label><input type="checkbox" class="filter-cb" id="filter-type-associative" checked> Associative</label>
         </div>
         <div id="weight-slider-container" style="margin-top:8px;">
-            <label for="filter-weight">Min. edge weight: <span id="weight-value">{min_weight:.2f}</span></label>
-            <input type="range" id="filter-weight" min="{min_weight}" max="{max_weight}" value="{min_weight}" step="0.1" style="width:100%;">
+            <label for="filter-weight">Min. edge weight: <span id="weight-value">1.00</span></label>
+            <input type="range" id="filter-weight" min="{min_weight}" max="{max_weight}" value="1.0" step="0.1" style="width:100%;">
         </div>
         <div class="filter-group" style="margin-top:8px; border-top: 1px solid #eee; padding-top: 8px;">
              <label><input type="checkbox" class="filter-cb" id="filter-hide-isolated"> Hide isolated nodes</label>
@@ -377,7 +259,6 @@ def add_custom_js(html_content, all_nodes_json, all_edges_json, min_weight, max_
     <div id="physics-controls" class="control-panel">
         <h4>Physics controls</h4>
         <button id="physics-toggle" class="active">Physics ON</button>
-        <button id="stabilize-btn">Stabilize</button>
         <button id="fit-btn">Fit all</button>
     </div>
 </div>
@@ -386,17 +267,64 @@ def add_custom_js(html_content, all_nodes_json, all_edges_json, min_weight, max_
 document.addEventListener('DOMContentLoaded', function() {{
     const allNodes = {all_nodes_json};
     const allEdges = {all_edges_json};
+    const nodeMetadata = {node_metadata_json};
     let currentNodeId = null;
     let physicsEnabled = true;
 
-    // --- ОБНОВЛЕННАЯ Логика фильтрации ---
+    // Function to display node metadata (without server)
+    function displayNodeMetadata(nodeId) {{
+        const metadata = nodeMetadata[nodeId];
+        if (!metadata) {{
+            return '<div class="error"><strong>Node not found</strong><br>ID: ' + nodeId + '</div>';
+        }}
+
+        const role = metadata.role;
+        const roleColor = role === 'user' ? '#5CB85C' : (role === '{AI_ROLE_NAME}' ? '#D9534F' : '#5BC0DE');
+        
+        let metadataHtml = '';
+        for (const [key, value] of Object.entries(metadata.metadata)) {{
+            metadataHtml += '<strong>' + key + ':</strong> ' + value + '<br>';
+        }}
+        if (!metadataHtml) {{
+            metadataHtml = 'No public attributes';
+        }}
+
+        let edgesHtml = '';
+        if (metadata.edges && metadata.edges.length > 0) {{
+            const displayEdges = metadata.edges.slice(0, 10);
+            edgesHtml = displayEdges.map(edge => 
+                '<div style="margin: 5px 0; padding: 5px; background: #f0f0f0; border-radius: 3px;"><strong>' + edge.to.substring(0, 40) + '...</strong> (' + edge.type + ') - weight: ' + edge.weight.toFixed(2) + '</div>'
+            ).join('');
+            if (metadata.edges.length > 10) {{
+                edgesHtml += '<div style="color: #666; font-style: italic;">... and ' + (metadata.edges.length - 10) + ' more</div>';
+            }}
+        }}
+
+        return '<div style="font-family: Arial, sans-serif;">' +
+            '<h3 style="color: #333; margin-top: 0;">Node: ' + nodeId + '</h3>' +
+            '<p><strong>Role:</strong> <span style="color: ' + roleColor + ';">' + role.charAt(0).toUpperCase() + role.slice(1) + '</span></p>' +
+            '<p><strong>Neighbors:</strong> ' + metadata.neighbors_count + '</p>' +
+            '<hr style="margin: 15px 0;">' +
+            '<h4>Content:</h4>' +
+            '<div style="background: #f9f9f9; padding: 20px; border-radius: 5px; border-left: 4px solid #007bff; text-align: center;">' +
+                '<p style="color: #666; margin: 0; font-size: 14px;"><strong>Node content is available to developers only</strong></p>' +
+                '<p style="color: #999; margin: 10px 0 0 0; font-size: 12px;">This information contains private data and is not intended for public viewing.</p>' +
+            '</div>' +
+            '<hr style="margin: 15px 0;">' +
+            '<h4>Metadata:</h4>' +
+            '<div style="background: #f9f9f9; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px;">' + metadataHtml + '</div>' +
+            (metadata.edges && metadata.edges.length > 0 ? 
+                '<hr style="margin: 15px 0;"><h4>Connections (' + metadata.edges.length + '):</h4><div style="max-height: 150px; overflow-y: auto;">' + edgesHtml + '</div>' 
+            : '') +
+        '</div>';
+    }}
+
     function applyFilters() {{
-        console.log("Applying filters...");
         const assistantChecked = document.getElementById('filter-role-{AI_ROLE_NAME}').checked;
         const visibleRoles = {{
             'user': document.getElementById('filter-role-user').checked,
             '{AI_ROLE_NAME}': assistantChecked,
-            'FOFE': assistantChecked,  // FOFE merged with assistant
+            'FOFE': assistantChecked,
             'internal': document.getElementById('filter-role-internal').checked
         }};
         const visibleTypes = {{
@@ -406,11 +334,9 @@ document.addEventListener('DOMContentLoaded', function() {{
         const minWeight = parseFloat(document.getElementById('filter-weight').value);
         const hideIsolated = document.getElementById('filter-hide-isolated').checked;
 
-        // Step 1: Filter nodes by roles
         let preliminaryNodes = allNodes.filter(node => visibleRoles[node.role]);
         const preliminaryNodeIds = new Set(preliminaryNodes.map(n => n.id));
 
-        // Step 2: Filter edges by type, weight and presence of nodes on both ends
         const filteredEdges = allEdges.filter(edge => 
             visibleTypes[edge.type] &&
             edge.weight >= minWeight &&
@@ -418,10 +344,8 @@ document.addEventListener('DOMContentLoaded', function() {{
             preliminaryNodeIds.has(edge.to)
         );
 
-        // Filter nodes further if needed
         let finalNodes;
         if (hideIsolated) {{
-            // If checkbox active, only keep nodes that participate in filtered edges
             const connectedNodeIds = new Set();
             filteredEdges.forEach(edge => {{
                 connectedNodeIds.add(edge.from);
@@ -429,17 +353,24 @@ document.addEventListener('DOMContentLoaded', function() {{
             }});
             finalNodes = preliminaryNodes.filter(node => connectedNodeIds.has(node.id));
         }} else {{
-            // Otherwise, just use nodes filtered by roles
             finalNodes = preliminaryNodes;
         }}
 
-        // Update network data
         nodes.clear();
         edges.clear();
         nodes.add(finalNodes);
         edges.add(filteredEdges);
-
-        console.log(`Graph updated: ${{finalNodes.length}} nodes, ${{filteredEdges.length}} edges`);
+        
+        // Automatically enable physics when filters change
+        if (typeof network !== 'undefined' && !physicsEnabled) {{
+            network.setOptions({{ physics: {{ enabled: true }} }});
+            physicsEnabled = true;
+            const toggleBtn = document.getElementById("physics-toggle");
+            if (toggleBtn) {{
+                toggleBtn.textContent = "Physics ON";
+                toggleBtn.classList.add("active");
+            }}
+        }}
     }}
 
     document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
@@ -449,21 +380,30 @@ document.addEventListener('DOMContentLoaded', function() {{
         document.getElementById('filter-hide-isolated').checked = false;
 
         const weightSlider = document.getElementById('filter-weight');
-        weightSlider.value = weightSlider.min;
-        document.getElementById('weight-value').textContent = parseFloat(weightSlider.min).toFixed(2);
+        weightSlider.value = 1.0;
+        document.getElementById('weight-value').textContent = '1.00';
 
         nodes.clear();
         edges.clear();
         nodes.add(allNodes);
         edges.add(allEdges);
-        console.log("Filters reset. Full graph shown.");
+        
+        // Automatically enable physics on reset
+        if (typeof network !== 'undefined' && !physicsEnabled) {{
+            network.setOptions({{ physics: {{ enabled: true }} }});
+            physicsEnabled = true;
+            const toggleBtn = document.getElementById("physics-toggle");
+            if (toggleBtn) {{
+                toggleBtn.textContent = "Physics ON";
+                toggleBtn.classList.add("active");
+            }}
+        }}
     }});
 
     document.getElementById('filter-weight').addEventListener('input', function() {{
         document.getElementById('weight-value').textContent = parseFloat(this.value).toFixed(2);
     }});
 
-    // Physics and click handling logic
     setTimeout(() => {{
         if (typeof network === 'undefined') {{
             console.error("Pyvis 'network' object not found!");
@@ -477,25 +417,22 @@ document.addEventListener('DOMContentLoaded', function() {{
                 const toggleBtn = document.getElementById("physics-toggle");
                 toggleBtn.textContent = "Physics OFF";
                 toggleBtn.classList.remove("active");
-                console.log("Physics automatically disabled after stabilization");
                 
-                // Hide loading overlay and show UI
-                const loadingOverlay = document.getElementById("loading-overlay");
-                const memoryPanel = document.getElementById("memory-panel");
-                const controlsContainer = document.getElementById("controls-container");
+                const loadingOverlay = document.getElementById(\"loading-overlay\");\n                const controlsContainer = document.getElementById(\"controls-container\");
                 
-                if (loadingOverlay) loadingOverlay.style.display = "none";
-                if (memoryPanel) {{
-                    memoryPanel.style.display = "block";
-                    setTimeout(() => memoryPanel.classList.add("visible"), 10);
-                }}
+                if (loadingOverlay) loadingOverlay.style.display = \"none\";
                 if (controlsContainer) {{
                     controlsContainer.style.display = "flex";
                     setTimeout(() => controlsContainer.classList.add("visible"), 10);
                 }}
-                
-                console.log("UI elements shown after graph loading");
             }}, 500);
+        }});
+
+        // Update stabilization progress
+        network.on("stabilizationProgress", function(params) {{
+            const progress = Math.round((params.iterations / params.total) * 100);
+            const progressEl = document.getElementById("loading-progress");
+            if (progressEl) progressEl.textContent = progress + "%";
         }});
 
         document.getElementById("physics-toggle").addEventListener("click", function() {{
@@ -503,24 +440,10 @@ document.addEventListener('DOMContentLoaded', function() {{
             network.setOptions({{ physics: {{ enabled: physicsEnabled }} }});
             this.textContent = physicsEnabled ? "Physics ON" : "Physics OFF";
             this.classList.toggle("active", physicsEnabled);
-            console.log(`Physics ${{physicsEnabled ? 'enabled' : 'disabled'}} manually`);
-        }});
-
-        document.getElementById("stabilize-btn").addEventListener("click", function() {{
-            if (!physicsEnabled) {{
-                network.setOptions({{ physics: {{ enabled: true }} }});
-                physicsEnabled = true;
-                const toggleBtn = document.getElementById("physics-toggle");
-                toggleBtn.textContent = "Physics ON";
-                toggleBtn.classList.add("active");
-            }}
-            network.stabilize();
-            console.log("Graph stabilization started");
         }});
 
         document.getElementById("fit-btn").addEventListener("click", function() {{
             network.fit();
-            console.log("Graph scaled to fit all nodes");
         }});
 
         network.on("click", function(e) {{
@@ -528,30 +451,20 @@ document.addEventListener('DOMContentLoaded', function() {{
             if (e.nodes.length > 0) {{
                 let nodeId = e.nodes[0];
                 currentNodeId = nodeId;
-                panel.innerHTML = '<div class="loading">Loading node data: ' + nodeId + '</div>';
-
-                fetch(`http://127.0.0.1:8000/memory/${{nodeId}}`)
-                    .then(response => {{
-                        if (!response.ok) {{ throw new Error(`HTTP ${{response.status}}: ${{response.statusText}}`); }}
-                        return response.text();
-                    }})
-                    .then(data => {{ if (currentNodeId === nodeId) {{ panel.innerHTML = data; }} }})
-                    .catch(error => {{
-                        console.error("Error loading data:", error);
-                        if (currentNodeId === nodeId) {{
-                            panel.innerHTML = `<div class="error"><strong>Error loading data</strong><br>Node: <code>${{nodeId}}</code><br>Error: ${{error.message}}<br><br><small>Make sure API server is running on port 8000</small></div>`;
-                        }}
-                    }});
+                panel.innerHTML = displayNodeMetadata(nodeId);
+                // Show panel only when clicking on a node
+                panel.style.display = "block";
+                setTimeout(() => panel.classList.add("visible"), 10);
             }} else {{
-                panel.innerHTML = '<div class="loading">Click on a node to view data</div>';
+                // Hide panel when clicking on empty space
+                panel.classList.remove("visible");
+                setTimeout(() => {{ panel.style.display = "none"; }}, 300);
                 currentNodeId = null;
             }}
         }});
 
         network.on("hoverNode", function() {{ document.body.style.cursor = "pointer"; }});
         network.on("blurNode", function() {{ document.body.style.cursor = "default"; }});
-
-        console.log("Enhanced graph visualizer ready!");
 
     }}, 100);
 }});
@@ -563,8 +476,8 @@ document.addEventListener('DOMContentLoaded', function() {{
 
 
 def visualize_interactive_with_graph(graph):
-    """Create interactive graph visualization."""
-    logging.info("--- Starting interactive graph visualizer ---")
+    """Create interactive public graph visualization."""
+    logging.info("--- Starting public graph visualizer ---")
 
     if graph is None:
         return False
@@ -575,25 +488,30 @@ def visualize_interactive_with_graph(graph):
 
     logging.info(f"Graph contains {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
 
+    # Prepare graph data
     nodes_data, edges_data, min_w, max_w = prepare_data_for_js(graph)
+    
+    # Prepare node metadata
+    node_metadata = prepare_node_metadata(graph)
 
     net = create_pyvis_network(nodes_data, edges_data)
 
     configure_physics(net)
 
-    html_path = "interactive_graph_visualization.html"
+    html_path = "public_graph_visualization.html"
     html_content = net.generate_html()
 
     all_nodes_json = json.dumps(nodes_data)
     all_edges_json = json.dumps(edges_data)
-    html_content = add_custom_js(html_content, all_nodes_json, all_edges_json, min_w, max_w)
+    node_metadata_json = json.dumps(node_metadata)
+    html_content = add_custom_js(html_content, all_nodes_json, all_edges_json, node_metadata_json, min_w, max_w)
 
     try:
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
         full_path = os.path.abspath(html_path)
-        logging.info(f"HTML file saved: {full_path}")
+        logging.info(f"Public HTML file saved: {full_path}")
 
         try:
             webbrowser.open(f"file://{full_path}")
@@ -610,10 +528,8 @@ def visualize_interactive_with_graph(graph):
 
 
 def main():
-    """Main entry point for the visualization script."""
-    global api_graph
-    
-    logging.info("Starting graph visualization system")
+    """Main entry point for public visualization script."""
+    logging.info("Starting public graph visualization system")
     
     # Load graph
     graph = load_graph()
@@ -621,24 +537,14 @@ def main():
         logging.error("Failed to load graph")
         return
     
-    # Make graph available for API
-    api_graph = graph
-    
-    # Start embedded API server
-    start_api_server()
-    
     # Create visualization
     viz_created = visualize_interactive_with_graph(graph)
 
     if viz_created:
-        logging.info("System started successfully!")
-        logging.info("Use the new filter panel at the bottom left to control graph display.")
-        logging.info("Click on nodes to view data")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logging.info("Shutting down...")
+        logging.info("Public system started successfully!")
+        logging.info("Use filter panel at bottom left to control graph display.")
+        logging.info("Click on nodes to view metadata (content is hidden)")
+        logging.info("HTML file works standalone, without a server")
     else:
         logging.error("Error creating visualization")
 

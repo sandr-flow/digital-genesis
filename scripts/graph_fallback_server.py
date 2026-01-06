@@ -9,15 +9,17 @@ import networkx as nx
 import sys
 import os
 
-# Добавляем текущую директорию в путь
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Добавляем корень проекта в путь для импорта config.py
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # Пытаемся импортировать конфиг
 try:
     from config import GRAPH_FILE_PATH, AI_ROLE_NAME
 except ImportError:
     print("⚠️  Не найден config.py, использую значения по умолчанию")
-    GRAPH_FILE_PATH = "graph.pkl"
+    GRAPH_FILE_PATH = "logs/mind_graph.gpickle"
     AI_ROLE_NAME = "assistant"
 
 app = FastAPI(title="Graph Memory API", description="API для получения данных узлов из NetworkX графа")
