@@ -27,7 +27,7 @@ logging.basicConfig(
 
 if not config.TELEGRAM_BOT_TOKEN or not config.GEMINI_API_KEY:
     raise ValueError(
-        "Необходимо установить TELEGRAM_BOT_TOKEN и GEMINI_API_KEY в .env файле"
+        "TELEGRAM_BOT_TOKEN and GEMINI_API_KEY must be set in the .env file"
     )
 
 # Initialize bot and dispatcher
@@ -48,31 +48,31 @@ reflection_engine = ReflectionEngine(ltm)
 async def main():
     """Start all bot components and run the polling loop."""
     
-    # Проверяем настройки концептов при запуске
-    concepts_logger.info("=== ДИАГНОСТИКА СИСТЕМЫ КОНЦЕПТОВ ===")
+    # specific Concept system diagnostics at startup
+    concepts_logger.info("=== CONCEPT SYSTEM DIAGNOSTICS ===")
     concepts_logger.info(
-        f"GEMINI_CONCEPTS_API_KEY установлен: "
+        f"GEMINI_CONCEPTS_API_KEY set: "
         f"{bool(getattr(config, 'GEMINI_CONCEPTS_API_KEY', None))}"
     )
     concepts_logger.info(
         f"GEMINI_CONCEPTS_MODEL_NAME: "
-        f"{getattr(config, 'GEMINI_CONCEPTS_MODEL_NAME', 'НЕ ЗАДАН')}"
+        f"{getattr(config, 'GEMINI_CONCEPTS_MODEL_NAME', 'NOT SET')}"
     )
     concepts_logger.info(
-        f"CONCEPT_EXTRACTION_PROMPT длина: "
+        f"CONCEPT_EXTRACTION_PROMPT length: "
         f"{len(getattr(config, 'CONCEPT_EXTRACTION_PROMPT', ''))}"
     )
     concepts_logger.info("=======================================")
 
-    # Настраиваем зависимости для обработчиков
+    # Set dependencies for handlers
     commands.set_user_chats(user_chats)
     messages.set_dependencies(user_chats, ltm)
     
-    # Регистрируем роутеры обработчиков
+    # Register handler routers
     dp.include_router(commands.router)
     dp.include_router(messages.router)
 
-    # Настройка планировщика фоновых задач
+    # Background task scheduler setup
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     scheduler.add_job(
         reflection_engine.run_cycle,
@@ -87,23 +87,23 @@ async def main():
         id='save_graph_job'
     )
     scheduler.start()
-    logging.info("Планировщик фоновых задач запущен.")
+    logging.info("Background task scheduler started.")
 
     try:
-        logging.info("Запуск поллинга Telegram...")
+        logging.info("Starting Telegram polling...")
         await dp.start_polling(bot)
     finally:
-        logging.info("Остановка поллинга...")
+        logging.info("Stopping polling...")
         scheduler.shutdown()
-        logging.info("Планировщик остановлен.")
-        logging.info("Выполняется финальное сохранение графа...")
+        logging.info("Scheduler stopped.")
+        logging.info("Performing final graph save...")
         graph_manager.save_graph()
-        logging.info("Система 'Цифровой Генезис' остановлена.")
+        logging.info("System 'Digital Genesis' stopped.")
 
 
 if __name__ == '__main__':
-    logging.info("Запуск системы 'Цифровой Генезис'...")
+    logging.info("Starting 'Digital Genesis' system...")
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Бот остановлен вручную.")
+        logging.info("Bot stopped manually.")
