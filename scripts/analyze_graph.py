@@ -1,4 +1,7 @@
-# export_db_to_csv.py (v4 - Final Architecture)
+"""Export database to CSV.
+
+Exports all ChromaDB collections to CSV files for Excel.
+"""
 
 import chromadb
 import csv
@@ -15,7 +18,7 @@ try:
         CHROMA_MODALITIES_COLLECTION_NAME
     )
 except ImportError:
-    print("Ошибка: Не удалось импортировать настройки из config.py.")
+    print("Error: Could not import settings from config.py.")
     exit(1)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,30 +26,30 @@ OUTPUT_DIR = "export"
 
 def process_collection(collection: chromadb.Collection, output_filename: str):
     """
-    Извлекает все данные из коллекции и сохраняет их в CSV-файл,
-    оптимизированный для открытия в Microsoft Excel.
+    Extract all data from collection and save to CSV file,
+    optimized for Microsoft Excel.
     """
     collection_name = collection.name
-    logging.info(f"Начинаю обработку коллекции: '{collection_name}'...")
+    logging.info(f"Starting processing collection: '{collection_name}'...")
 
     try:
         data = collection.get(include=["documents", "metadatas"])
     except Exception as e:
-        logging.error(f"Не удалось получить данные из коллекции '{collection_name}': {e}")
+        logging.error(f"Could not get data from collection '{collection_name}': {e}")
         return
 
     if not data or not data['ids']:
-        logging.warning(f"Коллекция '{collection_name}' пуста. Файл не будет создан.")
+        logging.warning(f"Collection '{collection_name}' is empty. File will not be created.")
         return
 
-    # --- Подготовка данных и заголовков ---
+    # --- Prepare data and headers ---
     all_metadata_keys = set()
     for metadata in data['metadatas']:
         if metadata:
             all_metadata_keys.update(metadata.keys())
 
     sorted_metadata_keys = sorted(list(all_metadata_keys))
-    # Убедимся, что document всегда второй, если он есть
+    # Ensure document is always second if present
     headers = ['id']
     if 'document' in sorted_metadata_keys:
         headers.append('document')
@@ -57,55 +60,55 @@ def process_collection(collection: chromadb.Collection, output_filename: str):
     rows_to_write = []
     for i in range(len(data['ids'])):
         row = {'id': data['ids'][i]}
-        # Добавляем документ, если он есть
+        # Add document if present
         if data['documents'] and data['documents'][i] is not None:
              row['document'] = data['documents'][i]
 
         metadata = data['metadatas'][i] or {}
 
-        # Распаковываем JSON-поля для лучшей читаемости
+        # Unpack JSON fields for better readability
         for key in ['parent_ids', 'тональность']:
              if key in metadata and isinstance(metadata.get(key), str):
                 try:
                     items_list = json.loads(metadata[key])
                     metadata[key] = ", ".join(items_list)
                 except (json.JSONDecodeError, TypeError):
-                    pass # Оставляем как есть, если невалидный JSON или не список
+                    pass # Leave as is if invalid JSON or not a list
 
         row.update(metadata)
         rows_to_write.append(row)
 
-    # --- Сортировка и адаптация данных для каждой коллекции ---
+    # --- Sort and adapt data for each collection ---
     if collection_name == CHROMA_STREAM_COLLECTION_NAME:
         rows_to_write.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
     elif collection_name == CHROMA_FACTS_COLLECTION_NAME:
-        # Факты сортируем по алфавиту для удобства
+        # Sort facts alphabetically for convenience
         rows_to_write.sort(key=lambda x: x.get('document', ''))
-    elif collection_name == CHROMA_CONCEPTS_COLLECTION_NAME: # Когнитивные активы
-        # Переименовываем 'document' в 'debug_info' для ясности
+    elif collection_name == CHROMA_CONCEPTS_COLLECTION_NAME: # Cognitive assets
+        # Rename 'document' to 'debug_info' for clarity
         if 'document' in headers:
             headers[headers.index('document')] = 'debug_info'
             for row in rows_to_write:
                 if 'document' in row:
                     row['debug_info'] = row.pop('document')
-        # Сортируем по ID родителя, чтобы видеть активы от одной реплики вместе
+        # Sort by parent ID to see assets from one reply together
         rows_to_write.sort(key=lambda x: x.get('parent_id', ''))
     elif collection_name == CHROMA_MODALITIES_COLLECTION_NAME:
-        # Переименовываем 'document' в 'hydrated_text'
+        # Rename 'document' to 'hydrated_text'
         if 'document' in headers:
             headers[headers.index('document')] = 'hydrated_text'
             for row in rows_to_write:
                 if 'document' in row:
                     row['hydrated_text'] = row.pop('document')
-        # Сортируем по оригинальному тексту
+        # Sort by original text
         rows_to_write.sort(key=lambda x: x.get('original_text', ''))
 
 
-    # --- Запись в CSV файл ---
+    # --- Write to CSV file ---
     output_path = os.path.join(OUTPUT_DIR, output_filename)
     try:
         with open(output_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
-            # Убедимся, что все ключи из rows_to_write есть в заголовках
+            # Ensure all keys from rows_to_write are in headers
             all_keys = set()
             for row in rows_to_write:
                 all_keys.update(row.keys())
@@ -116,16 +119,17 @@ def process_collection(collection: chromadb.Collection, output_filename: str):
             writer.writerows(rows_to_write)
 
         logging.info(
-            f"Успешно экспортировано {len(rows_to_write)} записей из '{collection_name}' в файл: {output_path}")
+            f"Successfully exported {len(rows_to_write)} records from '{collection_name}' to file: {output_path}")
 
     except Exception as e:
-        logging.error(f"Ошибка при записи CSV для '{collection_name}': {e}", exc_info=True)
+        logging.error(f"Error writing CSV for '{collection_name}': {e}", exc_info=True)
 
 
 def main():
-    print(f"--- Запуск экспорта данных из ChromaDB в CSV (v4 Architecture) ---")
+    """Main export function."""
+    print(f"--- Starting ChromaDB to CSV export ---")
     if not os.path.exists(CHROMA_DB_PATH):
-        logging.error(f"Директория с базой данных не найдена: {CHROMA_DB_PATH}")
+        logging.error(f"Database directory not found: {CHROMA_DB_PATH}")
         return
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -145,12 +149,12 @@ def main():
                 collection = client.get_collection(name=const_name)
                 process_collection(collection, f"{name}.csv")
             else:
-                logging.warning(f"Коллекция '{const_name}' не найдена в базе. Пропускаем.")
+                logging.warning(f"Collection '{const_name}' not found in database. Skipping.")
 
-        print(f"\n--- Экспорт завершен. Файлы сохранены в '{os.path.abspath(OUTPUT_DIR)}' ---")
+        print(f"\n--- Export complete. Files saved to '{os.path.abspath(OUTPUT_DIR)}' ---")
 
     except Exception as e:
-        logging.critical(f"Критическая ошибка во время экспорта: {e}", exc_info=True)
+        logging.critical(f"Critical error during export: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main()
