@@ -1,7 +1,4 @@
-# services/logging_config.py
-"""
-Централизованная настройка логирования для системы "Цифровой Генезис"
-"""
+"""Centralized logging configuration."""
 
 import logging
 import os
@@ -9,16 +6,17 @@ from config import LOG_DIR
 
 
 def setup_logging():
+    """Configure all system loggers.
+
+    Loggers:
+        - ThoughtProcess: thinking and dialogue process
+        - Reflections: reflection results
+        - Concepts: cognitive asset extraction
     """
-    Настраивает все логгеры системы:
-    - ThoughtProcess: процесс мышления и диалога
-    - Reflections: результаты рефлексии
-    - Concepts: извлечение когнитивных активов
-    """
-    # Создаем директорию для логов
+    # Create logs directory
     os.makedirs(LOG_DIR, exist_ok=True)
     
-    # --- Логгер процесса мышления ---
+    # --- Thought process logger ---
     thought_process_logger = logging.getLogger("ThoughtProcess")
     thought_process_logger.setLevel(logging.INFO)
     thought_process_logger.propagate = False
@@ -29,7 +27,7 @@ def setup_logging():
     )
     thought_process_logger.addHandler(thought_handler)
     
-    # --- Логгер рефлексий ---
+    # --- Reflections logger ---
     reflections_logger = logging.getLogger("Reflections")
     reflections_logger.setLevel(logging.INFO)
     reflections_logger.propagate = False
@@ -43,7 +41,7 @@ def setup_logging():
     )
     reflections_logger.addHandler(reflections_file_handler)
     
-    # --- Логгер концептов ---
+    # --- Concepts logger ---
     concepts_logger = logging.getLogger("Concepts")
     concepts_logger.setLevel(logging.INFO)
     concepts_logger.propagate = False
@@ -54,21 +52,21 @@ def setup_logging():
     )
     concepts_logger.addHandler(concepts_handler)
     
-    logging.info("Система логирования инициализирована")
+    logging.info("Logging system initialized")
     
     return thought_process_logger, reflections_logger, concepts_logger
 
 
 def get_thought_logger():
-    """Возвращает логгер процесса мышления"""
+    """Return the thought process logger."""
     return logging.getLogger("ThoughtProcess")
 
 
 def get_reflections_logger():
-    """Возвращает логгер рефлексий"""
+    """Return the reflections logger."""
     return logging.getLogger("Reflections")
 
 
 def get_concepts_logger():
-    """Возвращает логгер концептов"""
+    """Return the concepts logger."""
     return logging.getLogger("Concepts")

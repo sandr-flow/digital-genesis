@@ -1,7 +1,4 @@
-# handlers/messages.py
-"""
-Обработчик текстовых сообщений бота
-"""
+"""Text message handler for the Telegram bot."""
 
 import logging
 import statistics
@@ -15,11 +12,12 @@ import config
 from services.logging_config import get_thought_logger, get_concepts_logger
 from services.gemini import gemini_client
 from utils.formatters import convert_to_telegram_markdown
+from utils.keyboards import get_persistent_keyboard
 
-# Создаём роутер для сообщений
+# Message router
 router = Router()
 
-# Глобальные ссылки (будут установлены извне)
+# Global references (set externally)
 user_chats = {}
 ltm = None
 concepts_logger = None
@@ -27,12 +25,11 @@ thought_process_logger = None
 
 
 def set_dependencies(chats_dict, ltm_instance):
-    """
-    Устанавливает зависимости для обработчика сообщений
-    
+    """Set dependencies for the message handler.
+
     Args:
-        chats_dict: Словарь пользовательских чатов
-        ltm_instance: Экземпляр менеджера долгосрочной памяти
+        chats_dict: User chat sessions dictionary.
+        ltm_instance: Long-term memory manager instance.
     """
     global user_chats, ltm, concepts_logger, thought_process_logger
     user_chats = chats_dict
@@ -42,17 +39,16 @@ def set_dependencies(chats_dict, ltm_instance):
 
 
 async def run_concepts_extraction_with_wait(user_record_id: str, bot_record_id: str):
-    """
-    Запускает извлечение активов для обеих записей и ждет их завершения
-    
+    """Run asset extraction for both records and wait for completion.
+
     Args:
-        user_record_id: ID записи сообщения пользователя
-        bot_record_id: ID записи ответа бота
+        user_record_id: User message record ID.
+        bot_record_id: Bot response record ID.
     """
     concepts_logger.info("Запуск параллельного извлечения активов для диалоговой пары...")
 
     async def safe_extract_assets(parent_id: str, description: str):
-        """Безопасное извлечение активов с полным логированием ошибок"""
+        """Safely extract assets with full error logging."""
         concepts_logger.info(f"=== НАЧАЛО ИЗВЛЕЧЕНИЯ АКТИВОВ ===")
         concepts_logger.info(f"Parent ID: {parent_id}")
         concepts_logger.info(f"Description: {description}")
@@ -84,14 +80,13 @@ async def run_concepts_extraction_with_wait(user_record_id: str, bot_record_id: 
         concepts_logger.error(f"Ошибка при групповом извлечении активов: {e}", exc_info=True)
 
 
-@router.message(F.text)
+@router.message(F.text & (F.text != "🔄 Сброс контекста"))
 async def handle_text_message(message: Message, bot: Bot):
-    """
-    Обработчик текстовых сообщений
-    
+    """Handle incoming text messages.
+
     Args:
-        message: Входящее сообщение от пользователя
-        bot: Экземпляр бота для отправки действий
+        message: Incoming user message.
+        bot: Bot instance for sending actions.
     """
     user_id = message.from_user.id
     user_text = message.text
@@ -140,10 +135,17 @@ async def handle_text_message(message: Message, bot: Bot):
         # Отправка ответа с поддержкой Markdown
         bot_response_formatted = convert_to_telegram_markdown(bot_response_original)
         try:
-            await message.answer(bot_response_formatted, parse_mode=ParseMode.MARKDOWN)
+            await message.answer(
+                bot_response_formatted, 
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=get_persistent_keyboard()
+            )
         except TelegramBadRequest as e:
             logging.warning(f"Ошибка парсинга Markdown: {e}. Отправка как простой текст.")
-            await message.answer(bot_response_original)
+            await message.answer(
+                bot_response_original,
+                reply_markup=get_persistent_keyboard()
+            )
 
         # Сохранение в долгосрочную память
         bot_response_ac = round(statistics.median(dialogue_access_counts)) if dialogue_access_counts else 0
