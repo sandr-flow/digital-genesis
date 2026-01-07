@@ -187,7 +187,7 @@ class AssetExtractor:
         except Exception as e:
             logging.error(f"Error extracting/processing assets for {parent_id}: {e}", exc_info=True)
             self._concepts_model_instance = None
-            logging.warning("LTM: Assets model instance reset due to error."))
+            logging.warning("LTM: Assets model instance reset due to error.")
 
     def _add_or_update_cognitive_asset(self, asset_data: dict, parent_id: str, fact_id: str, modality_id: str) -> str:
         """Add or update a cognitive asset.

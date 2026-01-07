@@ -117,7 +117,7 @@ class ReflectionEngine:
 
         except Exception as e:
             logging.error(f"Reflection error with main model: {e}", exc_info=True)
-            self.concepts_logger.warning(f"REFLECTION: Main model error, switching to backup: {e}"))
+            self.concepts_logger.warning(f"REFLECTION: Main model error, switching to backup: {e}")
 
             # Check backup model availability
             if not hasattr(config, 'GEMINI_BACKUP_MODEL_NAME'):
@@ -149,7 +149,7 @@ class ReflectionEngine:
 
         self.thought_logger.info(f"Generated thought: '{thought_text}'")
         self.reflections_logger.info(thought_text)
-        self.concepts_logger.info(f"REFLECTION: Thought generated, length {len(thought_text)} chars"))
+        self.concepts_logger.info(f"REFLECTION: Thought generated, length {len(thought_text)} chars")
 
         try:
             # Calculate initial access count

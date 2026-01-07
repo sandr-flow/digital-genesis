@@ -1,1 +1,1 @@
-\"\"\"Core components of the Digital Genesis system.\"\"\"
+"""Core components of the Digital Genesis system."""
