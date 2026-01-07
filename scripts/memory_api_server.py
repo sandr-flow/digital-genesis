@@ -9,15 +9,17 @@ from fastapi.responses import HTMLResponse
 import sys
 import os
 
-# Add current directory to path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path for imports
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # Safe LTM import with all possible error handling
 ltm = None
 ltm_error = None
 
 try:
-    from ltm import ltm as ltm_instance
+    from core.ltm import ltm as ltm_instance
 
     ltm = ltm_instance
     print("LTM imported successfully")
@@ -27,7 +29,7 @@ except ImportError as e:
 except TypeError as e:
     ltm_error = f"TypeError during LTM initialization: {e}"
     print(f"Warning: LTM initialization error: {e}")
-    print("Likely a google-generativeai library version issue")
+    print("Likely a dependency or environment issue")
 except Exception as e:
     ltm_error = f"General error: {e}"
     print(f"Warning: Unexpected error loading LTM: {e}")

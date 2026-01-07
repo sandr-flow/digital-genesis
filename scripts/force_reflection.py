@@ -5,17 +5,30 @@ Manually triggers reflection cycles on specific record IDs.
 
 import asyncio
 import logging
-import sys
-import google.generativeai as genai
 import statistics
 import os
 
 import config
-from ltm import ltm
+from services.ai.gateway import AIProviderGateway
+import sys
+
+# Add project root to path for imports
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from core.ltm import ltm
 
 # --- Logger setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-genai.configure(api_key=config.GEMINI_API_KEY)
+provider_config = config.AI_PROVIDER_CONFIG.get(config.AI_PROVIDER, {})
+gateway = AIProviderGateway(
+    config.AI_PROVIDER,
+    provider_config,
+    config.AI_RATE_LIMIT_RPS,
+    config.AI_REQUEST_TIMEOUT_SECONDS,
+)
+provider = gateway.get_provider()
 
 thought_process_logger = logging.getLogger("ThoughtProcess")
 thought_process_logger.setLevel(logging.INFO)
@@ -87,9 +100,8 @@ async def force_reflection_on_id(seed_id: str):
     try:
         # 4. Act of Reflection
         print("\nSending reflection request to LLM...")
-        reflection_model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        response = await reflection_model.generate_content_async(reflection_prompt)
-        thought_text = response.text
+        reflection_model = provider.create_reflection_model()
+        thought_text = await reflection_model.generate_content_async(reflection_prompt)
 
         # 5. Calculate "weight"
         parent_counts = [mem['access_count'] for mem in reflection_cluster]

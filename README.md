@@ -137,7 +137,7 @@ python -m scripts.memory_hygiene_inspector
 # Force a reflection cycle on a specific memory ID
 python -m scripts.force_reflection
 ```
-Note: `scripts/force_reflection.py` currently uses Gemini directly and requires `GEMINI_API_KEY` even if `AI_PROVIDER` is set to `mistral`.
+`scripts/force_reflection.py` uses the active provider selected by `AI_PROVIDER`.
 
 ## Visualizations
 

@@ -6,11 +6,17 @@ Rebuilds the entire graph based on data from ChromaDB.
 import asyncio
 import logging
 import os
+import sys
 from tqdm import tqdm
 
+# Add project root to path for imports
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 # Ensure our modules are properly imported
-from ltm import ltm, LTM_Manager
-from graph_manager import graph_manager
+from core.ltm import ltm
+from core.graph import graph_manager
 from config import GRAPH_FILE_PATH
 
 # Logging setup
