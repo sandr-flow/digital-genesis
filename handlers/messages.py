@@ -10,7 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 import config
 from services.logging_config import get_thought_logger, get_concepts_logger
-from services.gemini import gemini_client
+from services.ai.base import AIProvider
 from utils.formatters import convert_to_telegram_markdown
 from utils.keyboards import get_persistent_keyboard
 
@@ -22,18 +22,21 @@ user_chats = {}
 ltm = None
 concepts_logger = None
 thought_process_logger = None
+ai_provider: AIProvider | None = None
 
 
-def set_dependencies(chats_dict, ltm_instance):
+def set_dependencies(chats_dict, ltm_instance, provider: AIProvider):
     """Set dependencies for the message handler.
 
     Args:
         chats_dict: User chat sessions dictionary.
         ltm_instance: Long-term memory manager instance.
+        provider: AI provider instance.
     """
-    global user_chats, ltm, concepts_logger, thought_process_logger
+    global user_chats, ltm, concepts_logger, thought_process_logger, ai_provider
     user_chats = chats_dict
     ltm = ltm_instance
+    ai_provider = provider
     concepts_logger = get_concepts_logger()
     thought_process_logger = get_thought_logger()
 
@@ -95,7 +98,9 @@ async def handle_text_message(message: Message, bot: Bot):
     chat_session = user_chats.get(user_id)
     if not chat_session:
         logging.info(f"No active STM session for user {user_id}. Creating new one.")
-        model = gemini_client.create_chat_model()
+        if not ai_provider:
+            raise RuntimeError("AI provider is not configured.")
+        model = ai_provider.create_chat_model(config.SYSTEM_PROMPT)
         chat_session = model.start_chat(history=[])
         user_chats[user_id] = chat_session
 
@@ -129,8 +134,7 @@ async def handle_text_message(message: Message, bot: Bot):
         thought_process_logger.info(f"Final prompt sent to LLM:\n---\n{final_prompt}\n---")
 
         # Get LLM response
-        response = await chat_session.send_message_async(final_prompt)
-        bot_response_original = response.text
+        bot_response_original = await chat_session.send_message_async(final_prompt)
 
         # Send response with Markdown support
         bot_response_formatted = convert_to_telegram_markdown(bot_response_original)

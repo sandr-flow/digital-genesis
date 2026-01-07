@@ -62,14 +62,14 @@ class GeminiClient:
         Returns:
             GenerativeModel for concept extraction or None.
         """
-        if not config.GEMINI_CONCEPTS_API_KEY:
-            logging.error("API-ключ для концептов (GEMINI_CONCEPTS_API_KEY) не найден!")
+        if not config.GEMINI_API_KEY:
+            logging.error("Concepts model requires GEMINI_API_KEY to be set.")
             return None
-            
-        logging.info(f"Создание модели '{config.GEMINI_CONCEPTS_MODEL_NAME}' для активов")
+        
+        logging.info(f"Creating concepts model '{config.GEMINI_CONCEPTS_MODEL_NAME}'")
         
         with self._config_lock:
-            genai.configure(api_key=config.GEMINI_CONCEPTS_API_KEY)
+            genai.configure(api_key=config.GEMINI_API_KEY)
             return genai.GenerativeModel(
                 model_name=config.GEMINI_CONCEPTS_MODEL_NAME,
                 safety_settings=config.SAFETY_SETTINGS

@@ -18,7 +18,7 @@ from config import (
     AI_ROLE_NAME
 )
 from core.graph import graph_manager
-from services.gemini import gemini_client
+from services.ai.base import AIProvider
 from .search import SearchManager
 from .facts import FactManager
 from .assets import AssetExtractor
@@ -30,7 +30,7 @@ class LTM_Manager:
     Coordinates ChromaDB collections and delegates tasks to submodules.
     """
     
-    def __init__(self):
+    def __init__(self, ai_provider: AIProvider | None = None):
         """Initialize the LTM manager and all submodules."""
         try:
             # Initialize ChromaDB client
@@ -65,7 +65,7 @@ class LTM_Manager:
                 self.stream_collection,
                 self.assets_collection,
                 self.fact_manager,
-                gemini_client
+                ai_provider
             )
             
         except Exception as e:

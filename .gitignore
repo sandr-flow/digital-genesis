@@ -87,6 +87,8 @@ local_settings.py
 
 # Internal notes
 TODO.md
+AI_GATEWAY_PLAN.md
+REFACTORING_PLAN.md
 
 # Workflow files
 .agent/

@@ -12,8 +12,8 @@ from aiogram import Bot, Dispatcher
 
 import config
 from services.logging_config import setup_logging, get_concepts_logger
-from services.gemini import gemini_client
-from core.ltm import ltm
+from services.ai.gateway import AIProviderGateway
+from core.ltm import LTM_Manager
 from core.graph import graph_manager
 from core.reflection.engine import ReflectionEngine
 from handlers import commands, messages
@@ -25,9 +25,12 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-if not config.TELEGRAM_BOT_TOKEN or not config.GEMINI_API_KEY:
+provider_config = config.AI_PROVIDER_CONFIG.get(config.AI_PROVIDER, {})
+provider_api_key = provider_config.get("api_key")
+
+if not config.TELEGRAM_BOT_TOKEN or not provider_api_key:
     raise ValueError(
-        "TELEGRAM_BOT_TOKEN and GEMINI_API_KEY must be set in the .env file"
+        "TELEGRAM_BOT_TOKEN and the provider API key must be set in the .env file"
     )
 
 # Initialize bot and dispatcher
@@ -41,8 +44,18 @@ user_chats = {}
 setup_logging()
 concepts_logger = get_concepts_logger()
 
-# Reflection engine
-reflection_engine = ReflectionEngine(ltm)
+# AI provider gateway and instances
+gateway = AIProviderGateway(
+    config.AI_PROVIDER,
+    provider_config,
+    config.AI_RATE_LIMIT_RPS,
+    config.AI_REQUEST_TIMEOUT_SECONDS,
+)
+ai_provider = gateway.get_provider()
+
+# LTM and reflection engine
+ltm = LTM_Manager(ai_provider)
+reflection_engine = ReflectionEngine(ltm, ai_provider)
 
 
 async def main():
@@ -50,13 +63,10 @@ async def main():
     
     # specific Concept system diagnostics at startup
     concepts_logger.info("=== CONCEPT SYSTEM DIAGNOSTICS ===")
+    concepts_logger.info(f"AI_PROVIDER: {config.AI_PROVIDER}")
     concepts_logger.info(
-        f"GEMINI_CONCEPTS_API_KEY set: "
-        f"{bool(getattr(config, 'GEMINI_CONCEPTS_API_KEY', None))}"
-    )
-    concepts_logger.info(
-        f"GEMINI_CONCEPTS_MODEL_NAME: "
-        f"{getattr(config, 'GEMINI_CONCEPTS_MODEL_NAME', 'NOT SET')}"
+        f"AI_CONCEPTS_MODEL_NAME: "
+        f"{provider_config.get('concepts_model', 'NOT SET')}"
     )
     concepts_logger.info(
         f"CONCEPT_EXTRACTION_PROMPT length: "
@@ -66,7 +76,7 @@ async def main():
 
     # Set dependencies for handlers
     commands.set_user_chats(user_chats)
-    messages.set_dependencies(user_chats, ltm)
+    messages.set_dependencies(user_chats, ltm, ai_provider)
     
     # Register handler routers
     dp.include_router(commands.router)

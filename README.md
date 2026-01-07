@@ -19,7 +19,7 @@ Traditional chatbots often suffer from amnesia or limited context windows. Digit
 1.  **Vector Memory (LTM):** Uses **ChromaDB** to store and retrieve "memories" (facts, thoughts, dialogues) based on semantic similarity.
 2.  **Graph Memory (NetworkX):** Maintains a knowledge graph of concepts and their relationships, enabling associative reasoning and role tracking.
 
-Powered by **Google Gemini** (via `google-generativeai`), the bot acts not just as a responder but as an autonomous entity that "thinks," "reflects," and "dreams" (via background reflection cycles).
+Powered by configurable AI providers (Gemini via `google-generativeai`, Mistral via `mistralai`), the bot acts not just as a responder but as an autonomous entity that "thinks," "reflects," and "dreams" (via background reflection cycles).
 
 ## Key Features
 
@@ -48,7 +48,7 @@ digital_genesis/
 │   ├── memory_cleaner.py          # Tool to prune short/duplicate memories
 │   ├── memory_hygiene_inspector.py# Analyzes LTM for quality and duplicates
 │   └── vizualize_graph_*.py       # Various graph visualization generators
-├── services/            # External integrations (Gemini, Logging)
+├── services/            # External integrations (AI providers, Logging)
 ├── utils/               # Helpers (Formatters, Keyboards)
 ├── .env.example         # Template for environment variables
 ├── config.py            # Central configuration
@@ -60,7 +60,7 @@ digital_genesis/
 
 ### Prerequisites
 - Python 3.10+
-- A Google Cloud Project with Gemini API access ([Google AI Studio](https://aistudio.google.com/))
+- A Google Cloud Project with Gemini API access ([Google AI Studio](https://aistudio.google.com/)) or a Mistral API key
 - A Telegram Bot Token ([BotFather](https://t.me/BotFather))
 
 ### Steps
@@ -93,9 +93,20 @@ digital_genesis/
     cp .env.example .env
     ```
 
+    Select the active provider via `AI_PROVIDER` and set the corresponding API key.
+    Each provider uses a single key for chat, reflection, and concepts.
+
     | Variable | Description |
     | :--- | :--- |
-    | `GEMINI_API_KEY` | Your Google Gemini API Key |
+    | `GEMINI_API_KEY` | Your Google Gemini API key |
+    | `MISTRAL_API_KEY` | Your Mistral API key |
+    | `AI_PROVIDER` | Active provider: `gemini` or `mistral` |
+    | `AI_REQUEST_TIMEOUT_SECONDS` | Global request timeout (0 to disable) |
+    | `AI_RATE_LIMIT_RPS` | Global rate limit (0 to disable) |
+    | `MISTRAL_CHAT_MODEL` | Mistral chat model name |
+    | `MISTRAL_REFLECTION_MODEL` | Mistral reflection model name |
+    | `MISTRAL_BACKUP_MODEL` | Mistral backup reflection model (optional) |
+    | `MISTRAL_CONCEPTS_MODEL` | Mistral concepts model name |
     | `TELEGRAM_BOT_TOKEN` | Your Telegram Bot Token |
     | `ADMIN_ID` | Telegram User ID of the bot admin |
 
@@ -126,6 +137,7 @@ python -m scripts.memory_hygiene_inspector
 # Force a reflection cycle on a specific memory ID
 python -m scripts.force_reflection
 ```
+Note: `scripts/force_reflection.py` currently uses Gemini directly and requires `GEMINI_API_KEY` even if `AI_PROVIDER` is set to `mistral`.
 
 ## Visualizations
 

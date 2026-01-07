@@ -16,19 +16,19 @@ class AssetExtractor:
     Handles asset extraction from text, storage, and graph updates.
     """
     
-    def __init__(self, stream_collection, assets_collection, fact_manager, gemini_client):
+    def __init__(self, stream_collection, assets_collection, fact_manager, ai_provider):
         """Initialize the asset extractor.
 
         Args:
             stream_collection: Main stream collection.
             assets_collection: Assets collection.
             fact_manager: Facts and modalities manager.
-            gemini_client: Gemini API client.
+            ai_provider: AI provider instance.
         """
         self.stream_collection = stream_collection
         self.assets_collection = assets_collection
         self.fact_manager = fact_manager
-        self.gemini_client = gemini_client
+        self.ai_provider = ai_provider
         self._concepts_model_instance = None
     
     @staticmethod
@@ -58,12 +58,18 @@ class AssetExtractor:
         """Get or create the concepts extraction model.
 
         Returns:
-            Gemini model or None.
+            Structured model or None.
         """
         if self._concepts_model_instance is None:
-            self._concepts_model_instance = self.gemini_client.create_concepts_model()
-            if self._concepts_model_instance:
+            if not self.ai_provider:
+                logging.warning("LTM: AI provider not configured for concepts extraction.")
+                return None
+            try:
+                self._concepts_model_instance = self.ai_provider.create_concepts_model()
                 logging.info("LTM: Independent model for assets created successfully.")
+            except Exception as e:
+                logging.error(f"LTM: Failed to initialize concepts model: {e}", exc_info=True)
+                self._concepts_model_instance = None
         return self._concepts_model_instance
     
     async def extract_and_process_assets(self, parent_id: str):
@@ -110,51 +116,47 @@ class AssetExtractor:
 """
             
             # Use Structured Output with JSON schema
-            response = await concepts_model.generate_content_async(
+            assets_data = await concepts_model.generate_content_async(
                 prompt,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "кто": {
-                                    "type": "string",
-                                    "enum": ["я", "пользователь"],
-                                    "description": "Агент мысли"
-                                },
-                                "что_делает": {
-                                    "type": "string",
-                                    "description": "Глагол ментального действия (3 лицо, ед. число)"
-                                },
-                                "суть": {
-                                    "type": "string",
-                                    "description": "Чистая суть утверждения без субъекта и действия"
-                                },
-                                "тональность": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Эмоциональная окраска (прилагательные)"
-                                },
-                                "importance": {
-                                    "type": "integer",
-                                    "description": "Важность для анализа (1-10)"
-                                },
-                                "confidence": {
-                                    "type": "integer",
-                                    "description": "Насколько явно актив следует из текста (1-10)"
-                                }
+                response_schema={
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "кто": {
+                                "type": "string",
+                                "enum": ["я", "пользователь"],
+                                "description": "Агент мысли"
                             },
-                            "required": ["кто", "что_делает", "суть", "тональность", "importance", "confidence"]
-                        }
+                            "что_делает": {
+                                "type": "string",
+                                "description": "Глагол ментального действия (3 лицо, ед. число)"
+                            },
+                            "суть": {
+                                "type": "string",
+                                "description": "Чистая суть утверждения без субъекта и действия"
+                            },
+                            "тональность": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Эмоциональная окраска (прилагательные)"
+                            },
+                            "importance": {
+                                "type": "integer",
+                                "description": "Важность для анализа (1-10)"
+                            },
+                            "confidence": {
+                                "type": "integer",
+                                "description": "Насколько явно актив следует из текста (1-10)"
+                            }
+                        },
+                        "required": ["кто", "что_делает", "суть", "тональность", "importance", "confidence"]
                     }
                 }
             )
             
-            # With Structured Output, JSON parses automatically
-            assets_data = json.loads(response.text)
-            
+            if isinstance(assets_data, dict) and isinstance(assets_data.get("items"), list):
+                assets_data = assets_data["items"]
             if not isinstance(assets_data, list):
                 logging.warning(f"LTM: Model response is not a JSON array for {parent_id}.")
                 return

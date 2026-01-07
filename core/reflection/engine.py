@@ -3,7 +3,7 @@
 import logging
 import statistics
 from services.logging_config import get_thought_logger, get_reflections_logger, get_concepts_logger
-from services.gemini import gemini_client
+from services.ai.base import AIProvider
 import config
 
 
@@ -13,13 +13,15 @@ class ReflectionEngine:
     Analyzes hot records and generates insights.
     """
     
-    def __init__(self, ltm_manager):
+    def __init__(self, ltm_manager, provider: AIProvider):
         """Initialize the reflection engine.
 
         Args:
             ltm_manager: Long-term memory manager instance.
+            provider: AI provider instance.
         """
         self.ltm = ltm_manager
+        self.provider = provider
         self.thought_logger = get_thought_logger()
         self.reflections_logger = get_reflections_logger()
         self.concepts_logger = get_concepts_logger()
@@ -110,9 +112,8 @@ class ReflectionEngine:
         try:
             self.concepts_logger.info("REFLECTION: Sending request to main model...")
             
-            reflection_model = gemini_client.create_reflection_model()
-            response = await reflection_model.generate_content_async(reflection_prompt)
-            thought_text = response.text
+            reflection_model = self.provider.create_reflection_model()
+            thought_text = await reflection_model.generate_content_async(reflection_prompt)
             self.concepts_logger.info("REFLECTION: Response received from main model")
 
         except Exception as e:
@@ -120,14 +121,12 @@ class ReflectionEngine:
             self.concepts_logger.warning(f"REFLECTION: Main model error, switching to backup: {e}")
 
             # Check backup model availability
-            if not hasattr(config, 'GEMINI_BACKUP_MODEL_NAME'):
-                self.concepts_logger.error("REFLECTION: GEMINI_BACKUP_MODEL_NAME not found in config")
-                return None
-
             try:
-                backup_model = gemini_client.create_backup_reflection_model()
-                response = await backup_model.generate_content_async(reflection_prompt)
-                thought_text = response.text
+                backup_model = self.provider.create_backup_reflection_model()
+                if not backup_model:
+                    self.concepts_logger.error("REFLECTION: Backup model not configured")
+                    return None
+                thought_text = await backup_model.generate_content_async(reflection_prompt)
                 self.concepts_logger.info("REFLECTION: Response received from backup model")
             except Exception as e2:
                 logging.error(f"Reflection failed with backup model: {e2}", exc_info=True)

@@ -13,7 +13,7 @@ load_dotenv()
 # --- API Keys ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_CONCEPTS_API_KEY = os.getenv("GEMINI_CONCEPTS_API_KEY_2")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
 LOG_DIR = "logs"
 
@@ -21,6 +21,31 @@ LOG_DIR = "logs"
 GEMINI_MODEL_NAME = 'gemini-2.5-flash'
 GEMINI_BACKUP_MODEL_NAME = 'gemini-1.5-flash'  # Backup model for reflection
 GEMINI_CONCEPTS_MODEL_NAME = 'gemini-2.0-flash'
+MISTRAL_CHAT_MODEL = os.getenv("MISTRAL_CHAT_MODEL", "mistral-large-latest")
+MISTRAL_REFLECTION_MODEL = os.getenv("MISTRAL_REFLECTION_MODEL", "mistral-large-latest")
+MISTRAL_BACKUP_MODEL = os.getenv("MISTRAL_BACKUP_MODEL", "")
+MISTRAL_CONCEPTS_MODEL = os.getenv("MISTRAL_CONCEPTS_MODEL", "mistral-large-latest")
+
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
+AI_REQUEST_TIMEOUT_SECONDS = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
+AI_RATE_LIMIT_RPS = float(os.getenv("AI_RATE_LIMIT_RPS", "0"))
+
+AI_PROVIDER_CONFIG = {
+    "gemini": {
+        "api_key": GEMINI_API_KEY,
+        "chat_model": GEMINI_MODEL_NAME,
+        "reflection_model": GEMINI_MODEL_NAME,
+        "backup_model": GEMINI_BACKUP_MODEL_NAME,
+        "concepts_model": GEMINI_CONCEPTS_MODEL_NAME,
+    },
+    "mistral": {
+        "api_key": MISTRAL_API_KEY,
+        "chat_model": MISTRAL_CHAT_MODEL,
+        "reflection_model": MISTRAL_REFLECTION_MODEL,
+        "backup_model": MISTRAL_BACKUP_MODEL,
+        "concepts_model": MISTRAL_CONCEPTS_MODEL,
+    },
+}
 AI_ROLE_NAME = "assistant"
 SAFETY_SETTINGS = {
     "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
