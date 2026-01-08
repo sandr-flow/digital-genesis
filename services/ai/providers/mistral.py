@@ -111,35 +111,37 @@ class MistralStructuredModel(StructuredModel):
         self._timeout_seconds = timeout_seconds
 
     async def generate_content_async(self, prompt: str, response_schema: dict) -> dict:
+        """Generate structured content using Mistral's JSON schema mode.
+        
+        Args:
+            prompt: User prompt.
+            response_schema: JSON schema for response validation.
+            
+        Returns:
+            Parsed JSON response matching the schema.
+        """
         await self._rate_limiter.wait()
         messages = [{"role": "user", "content": prompt}]
-        try:
-            response = await request_with_timeout(
-                asyncio.to_thread(
-                    self._client.chat.complete,
-                    model=self._model_name,
-                    messages=messages,
-                    response_format={"type": "json_object"},
-                ),
-                self._timeout_seconds,
-            )
-            return json.loads(response.choices[0].message.content)
-        except TypeError:
-            schema_hint = json.dumps(response_schema, ensure_ascii=False)
-            strict_prompt = (
-                f"{prompt}\n\n"
-                "Return only valid JSON that matches this schema:\n"
-                f"{schema_hint}"
-            )
-            response = await request_with_timeout(
-                asyncio.to_thread(
-                    self._client.chat.complete,
-                    model=self._model_name,
-                    messages=[{"role": "user", "content": strict_prompt}],
-                ),
-                self._timeout_seconds,
-            )
-            return json.loads(response.choices[0].message.content)
+        
+        # Use json_schema mode for guaranteed schema compliance
+        # Mistral API expects the schema in response_format
+        response = await request_with_timeout(
+            asyncio.to_thread(
+                self._client.chat.complete,
+                model=self._model_name,
+                messages=messages,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "cognitive_assets_extraction",
+                        "strict": True,
+                        "schema": response_schema
+                    }
+                },
+            ),
+            self._timeout_seconds,
+        )
+        return json.loads(response.choices[0].message.content)
 
 
 class MistralProvider(AIProvider):
