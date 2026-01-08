@@ -36,47 +36,123 @@ class GraphManager:
         )
 
     def _load_graph(self) -> nx.Graph:
-        """Load graph from disk or create a new one if file not found.
+        """Load graph from disk with robust error handling.
 
         Returns:
             NetworkX graph object.
+
+        Raises:
+            RuntimeError: If graph file exists but cannot be loaded.
         """
-        if os.path.exists(self.graph_path):
-            try:
-                with open(self.graph_path, 'rb') as f:
-                    return pickle.load(f)
-            except Exception as e:
-                logging.error(
-                    f"Graph Manager: Error loading graph from {self.graph_path}: {e}. "
-                    "Creating new graph."
+        # Check if main file exists
+        if not os.path.exists(self.graph_path):
+            # Main file missing - check for backup before creating new graph
+            backup_path = f"{self.graph_path}.bak"
+            if os.path.exists(backup_path):
+                logging.warning(
+                    f"Graph Manager: Main file not found, but backup exists at {backup_path}. "
+                    "Attempting to restore from backup."
                 )
-                return nx.Graph()
-        else:
+                try:
+                    with open(backup_path, 'rb') as f:
+                        graph = pickle.load(f)
+                    # Restore backup as main file
+                    os.replace(backup_path, self.graph_path)
+                    logging.info("Graph Manager: Successfully restored from backup.")
+                    return graph
+                except Exception as e:
+                    logging.error(f"Graph Manager: Failed to load backup: {e}")
+                    # Fall through to create new graph
+            
             logging.info(
                 f"Graph Manager: Graph file not found at {self.graph_path}. "
                 "Creating new graph."
             )
             return nx.Graph()
 
-    def save_graph(self):
-        """Save the current graph state to disk.
-
-        This operation is synchronous as pickle lacks native async API.
-        Call with asyncio.to_thread in async code.
-        """
+        # File exists - attempt to load
         try:
-            os.makedirs(os.path.dirname(self.graph_path), exist_ok=True)
-            # No lock during save - assuming this is called infrequently (e.g., on timer)
-            # and not concurrently with modifications
-            with open(self.graph_path, 'wb') as f:
-                pickle.dump(self.graph, f, pickle.HIGHEST_PROTOCOL)
-            logging.info(
-                f"Graph Manager: Graph saved to '{self.graph_path}'. "
-                f"Nodes: {self.graph.number_of_nodes()}, "
-                f"Edges: {self.graph.number_of_edges()}"
-            )
+            with open(self.graph_path, 'rb') as f:
+                graph = pickle.load(f)
+            logging.info(f"Graph Manager: Graph loaded from {self.graph_path}")
+            return graph
         except Exception as e:
-            logging.error(f"Graph Manager: Failed to save graph: {e}")
+            # File exists but corrupted - preserve it for manual recovery
+            corrupted_path = f"{self.graph_path}.corrupted"
+            logging.error(
+                f"Graph Manager: Failed to load graph from {self.graph_path}: {e}. "
+                f"Renaming to {corrupted_path} for manual recovery."
+            )
+            os.rename(self.graph_path, corrupted_path)
+
+            # Try loading backup if available
+            backup_path = f"{self.graph_path}.bak"
+            if os.path.exists(backup_path):
+                logging.info(f"Graph Manager: Attempting to load backup from {backup_path}")
+                try:
+                    with open(backup_path, 'rb') as f:
+                        return pickle.load(f)
+                except Exception as backup_error:
+                    logging.error(f"Graph Manager: Backup also corrupted: {backup_error}")
+
+            raise RuntimeError(
+                f"Cannot load graph from {self.graph_path}. "
+                f"Corrupted file saved to {corrupted_path}. "
+                "Please restore from backup or delete to start fresh."
+            )
+
+    def _sync_save_graph(self, temp_path: str, backup_path: str):
+        """Synchronous graph save operation for thread pool execution.
+        
+        This method contains blocking I/O operations and should only be called
+        from asyncio.to_thread() to avoid blocking the event loop.
+        
+        Args:
+            temp_path: Path to temporary file.
+            backup_path: Path to backup file.
+        """
+        # Write to temporary file first (blocking I/O)
+        with open(temp_path, 'wb') as f:
+            pickle.dump(self.graph, f, pickle.HIGHEST_PROTOCOL)
+
+        # Create backup of old graph before replacing
+        if os.path.exists(self.graph_path):
+            os.replace(self.graph_path, backup_path)
+
+        # Atomic replace - if this fails, backup is still intact
+        os.replace(temp_path, self.graph_path)
+
+    async def save_graph(self):
+        """Save the current graph state to disk atomically.
+
+        Thread-safe: Acquires lock before serialization to prevent race conditions.
+        Non-blocking: Runs blocking I/O in thread pool to avoid freezing event loop.
+        Atomic: Writes to temp file, then replaces original to prevent corruption.
+        Creates backup of previous graph before overwriting.
+        """
+        async with self.lock:  # Prevent concurrent modifications during serialization
+            temp_path = f"{self.graph_path}.tmp"
+            backup_path = f"{self.graph_path}.bak"
+            
+            try:
+                os.makedirs(os.path.dirname(self.graph_path), exist_ok=True)
+
+                # Run blocking I/O in thread pool to avoid blocking event loop
+                await asyncio.to_thread(self._sync_save_graph, temp_path, backup_path)
+
+                logging.info(
+                    f"Graph Manager: Graph saved atomically to '{self.graph_path}'. "
+                    f"Nodes: {self.graph.number_of_nodes()}, "
+                    f"Edges: {self.graph.number_of_edges()}"
+                )
+            except Exception as e:
+                logging.error(f"Graph Manager: Failed to save graph: {e}", exc_info=True)
+                # Clean up temp file if it exists
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass  # Best effort cleanup
 
     async def add_node_if_not_exists(self, node_id: str, **attrs):
         """Add a node if it doesn't exist and update its attributes.
@@ -89,8 +165,8 @@ class GraphManager:
             if not self.graph.has_node(node_id):
                 self.graph.add_node(node_id, **attrs)
             else:
-                # Update attributes if node already exists
-                nx.set_node_attributes(self.graph, {node_id: attrs})
+                # Direct update is faster than nx.set_node_attributes for single node
+                self.graph.nodes[node_id].update(attrs)
 
     async def add_or_update_edge(
         self,

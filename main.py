@@ -90,8 +90,9 @@ async def main():
         seconds=config.REFLECTION_INTERVAL_SECONDS,
         id='reflection_job'
     )
+    # Wrap async save_graph in task creation for scheduler
     scheduler.add_job(
-        graph_manager.save_graph,
+        lambda: asyncio.create_task(graph_manager.save_graph()),
         'interval',
         seconds=config.GRAPH_SAVE_INTERVAL_SECONDS,
         id='save_graph_job'
@@ -107,7 +108,7 @@ async def main():
         scheduler.shutdown()
         logging.info("Scheduler stopped.")
         logging.info("Performing final graph save...")
-        graph_manager.save_graph()
+        await graph_manager.save_graph()
         logging.info("System 'Digital Genesis' stopped.")
 
 
