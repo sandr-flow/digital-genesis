@@ -9,7 +9,7 @@ import google.generativeai as genai
 
 import config
 from services.ai.base import AIProvider, ChatModel, ChatSession, TextModel, StructuredModel
-from services.ai.limits import AsyncRateLimiter, request_with_timeout
+from services.ai.limits import AsyncRateLimiter, request_with_retry
 
 
 class GeminiChatSession(ChatSession):
@@ -21,9 +21,9 @@ class GeminiChatSession(ChatSession):
         self._timeout_seconds = timeout_seconds
 
     async def send_message_async(self, text: str) -> str:
-        await self._rate_limiter.wait()
-        response = await request_with_timeout(
-            self._session.send_message_async(text),
+        response = await request_with_retry(
+            lambda: self._session.send_message_async(text),
+            self._rate_limiter,
             self._timeout_seconds
         )
         return response.text
@@ -51,9 +51,9 @@ class GeminiTextModel(TextModel):
         self._timeout_seconds = timeout_seconds
 
     async def generate_content_async(self, prompt: str) -> str:
-        await self._rate_limiter.wait()
-        response = await request_with_timeout(
-            self._model.generate_content_async(prompt),
+        response = await request_with_retry(
+            lambda: self._model.generate_content_async(prompt),
+            self._rate_limiter,
             self._timeout_seconds
         )
         return response.text
@@ -68,15 +68,15 @@ class GeminiStructuredModel(StructuredModel):
         self._timeout_seconds = timeout_seconds
 
     async def generate_content_async(self, prompt: str, response_schema: dict) -> dict:
-        await self._rate_limiter.wait()
-        response = await request_with_timeout(
-            self._model.generate_content_async(
+        response = await request_with_retry(
+            lambda: self._model.generate_content_async(
                 prompt,
                 generation_config={
                     "response_mime_type": "application/json",
                     "response_schema": response_schema,
                 }
             ),
+            self._rate_limiter,
             self._timeout_seconds
         )
         return json.loads(response.text)

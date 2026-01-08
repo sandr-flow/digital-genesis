@@ -27,8 +27,8 @@ MISTRAL_BACKUP_MODEL = os.getenv("MISTRAL_BACKUP_MODEL", "")
 MISTRAL_CONCEPTS_MODEL = os.getenv("MISTRAL_CONCEPTS_MODEL", "mistral-large-latest")
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
-AI_REQUEST_TIMEOUT_SECONDS = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
-AI_RATE_LIMIT_RPS = float(os.getenv("AI_RATE_LIMIT_RPS", "0"))
+AI_REQUEST_TIMEOUT_SECONDS = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "90"))
+AI_RATE_LIMIT_RPS = float(os.getenv("AI_RATE_LIMIT_RPS", "1"))
 
 AI_PROVIDER_CONFIG = {
     "gemini": {

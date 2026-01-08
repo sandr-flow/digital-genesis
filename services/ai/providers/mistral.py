@@ -6,7 +6,7 @@ import asyncio
 import json
 
 from services.ai.base import AIProvider, ChatModel, ChatSession, TextModel, StructuredModel, normalize_history
-from services.ai.limits import AsyncRateLimiter, request_with_timeout
+from services.ai.limits import AsyncRateLimiter, request_with_retry
 
 try:
     from mistralai import Mistral
@@ -37,13 +37,14 @@ class MistralChatSession(ChatSession):
 
     async def send_message_async(self, text: str) -> str:
         self._messages.append({"role": "user", "content": text})
-        await self._rate_limiter.wait()
-        response = await request_with_timeout(
-            asyncio.to_thread(
+        
+        response = await request_with_retry(
+            lambda: asyncio.to_thread(
                 self._client.chat.complete,
                 model=self._model_name,
                 messages=self._messages,
             ),
+            self._rate_limiter,
             self._timeout_seconds,
         )
         content = response.choices[0].message.content
@@ -89,13 +90,13 @@ class MistralTextModel(TextModel):
         self._timeout_seconds = timeout_seconds
 
     async def generate_content_async(self, prompt: str) -> str:
-        await self._rate_limiter.wait()
-        response = await request_with_timeout(
-            asyncio.to_thread(
+        response = await request_with_retry(
+            lambda: asyncio.to_thread(
                 self._client.chat.complete,
                 model=self._model_name,
                 messages=[{"role": "user", "content": prompt}],
             ),
+            self._rate_limiter,
             self._timeout_seconds,
         )
         return response.choices[0].message.content
@@ -120,13 +121,12 @@ class MistralStructuredModel(StructuredModel):
         Returns:
             Parsed JSON response matching the schema.
         """
-        await self._rate_limiter.wait()
         messages = [{"role": "user", "content": prompt}]
         
         # Use json_schema mode for guaranteed schema compliance
         # Mistral API expects the schema in response_format
-        response = await request_with_timeout(
-            asyncio.to_thread(
+        response = await request_with_retry(
+            lambda: asyncio.to_thread(
                 self._client.chat.complete,
                 model=self._model_name,
                 messages=messages,
@@ -139,6 +139,7 @@ class MistralStructuredModel(StructuredModel):
                     }
                 },
             ),
+            self._rate_limiter,
             self._timeout_seconds,
         )
         return json.loads(response.choices[0].message.content)
